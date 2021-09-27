@@ -1,0 +1,43 @@
+version: "3.9"
+    
+services:
+  waltz:
+    build: ./
+    restart: always
+    container_name: waltz
+    hostname: waltz
+    # command: ["update"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    links:
+      - postgres
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: waltz
+      DB_USER: waltz
+      DB_PASSWORD: waltz
+      DB_SCHEME: waltz
+      WALTZ_FROM_EMAIL: "ljubonikolic@gmail.com"
+      WALTZ_BASE_URL: "http://127.0.0.1:8080/"
+      CHANGELOG_FILE: "/liquibase/changelog/db.changelog-master.xml"
+    volumes:
+      - ./waltz-data/src/main/ddl/liquibase/:/liquibase/changelog
+
+  postgres:
+    image: postgres:10.6
+    container_name: postgres
+    hostname: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U waltz -d waltz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: "waltz"
+      POSTGRES_PASSWORD: "waltz"
+      POSTGRES_USER: "waltz"
