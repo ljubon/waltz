@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Set default values for required env vars
 check=( DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD DB_SCHEME WALTZ_FROM_EMAIL WALTZ_BASE_URL CHANGELOG_FILE )
 for x in "${check[@]}"
 do
