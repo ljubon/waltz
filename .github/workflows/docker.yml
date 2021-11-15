@@ -12,11 +12,11 @@ jobs:
       postgres:
         image: postgres:10.6
         env:
-          POSTGRES_USER: waltz
+          POSTGRES_USER: postgres
           POSTGRES_DB: waltz
-          POSTGRES_PASSWORD: waltz
+          POSTGRES_PASSWORD: postgres 
         ports:
-          - 5433:5432
+          - 5432:5432
         options: >-
           --health-cmd "pg_isready -U waltz -d waltz"
           --health-interval 10s 
@@ -29,17 +29,11 @@ jobs:
       uses: actions/setup-java@v2
       with:
         java-version: '8'
-        distribution: 'adopt'
-
-    - name: Cache Maven packages    
-      uses: actions/cache@v1
-      with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-m2
-        restore-keys: ${{ runner.os }}-m2
+        distribution: 'temurin'
+        cache: 'maven'
 
     - name: Build with Maven - postgresql
-      run: mvn -B clean package -Pwaltz-postgres,docker-postgres --settings settings.xml
+      run: mvn -B clean package -Pwaltz-postgres,build-postgres,ci -s .build.settings.xml
 
     - name: Publish build
       uses: actions/upload-artifact@v2
@@ -71,7 +65,8 @@ jobs:
       uses: actions/setup-java@v2
       with:
         java-version: '8'
-        distribution: 'adopt'
+        distribution: 'temurin'
+        cache: 'maven'
 
     - name: Download WAR artifact
       uses: actions/download-artifact@v2

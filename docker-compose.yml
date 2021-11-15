@@ -6,7 +6,7 @@ services:
     restart: always
     container_name: waltz
     hostname: waltz
-    command: ["update", "run"]
+    command: ["update","run"]
     ports:
       - "8080:8080"
     depends_on:
@@ -22,9 +22,7 @@ services:
       DB_SCHEME: waltz
       WALTZ_FROM_EMAIL: "help@finos.org"
       WALTZ_BASE_URL: "http://127.0.0.1:8080/"
-      CHANGELOG_FILE: "/liquibase/changelog/db.changelog-master.xml"
-    volumes:
-      - ./waltz-data/src/main/ddl/liquibase/:/liquibase/changelog
+      CHANGELOG_FILE: "/opt/waltz/liquibase/db.changelog-master.xml"
 
   postgres:
     image: postgres:10.6
