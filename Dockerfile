@@ -3,8 +3,8 @@ FROM tomcat:8-jre8-temurin
 ENV PATH="/usr/local/bin/liquibase:${PATH}" 
 
 RUN useradd -ms /bin/bash waltz && \
-  mkdir -p /home/waltz/.waltz && \
-  chown -R waltz /usr/local/tomcat /home/waltz/.waltz && \
+  mkdir -p /home/waltz/.waltz /opt/waltz/liquibase && \
+  chown -R waltz:waltz /usr/local/tomcat /opt/waltz/liquibase /home/waltz/.waltz && \
   curl -sLO https://github.com/liquibase/liquibase-package-manager/releases/download/v0.1.2/lpm-0.1.2-linux.zip && \
   curl -sLO https://github.com/liquibase/liquibase/releases/download/v4.5.0/liquibase-4.5.0.zip && \
   apt-get update && apt-get install -y unzip postgresql-client gettext-base && \
