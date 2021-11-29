@@ -10,20 +10,14 @@ services:
     depends_on:
       - postgres
     environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: waltz
-      DB_USER: waltz
-      DB_PASSWORD: waltz
-      DB_SCHEME: waltz
-      WALTZ_FROM_EMAIL: "help@finos.org"
-      WALTZ_BASE_URL: "http://127.0.0.1:8080/"
-      CHANGELOG_FILE: "/opt/waltz/liquibase/db.changelog-master.xml"
+      DB_HOST: "postgres"
+      DB_PORT: "5432"
+      DB_NAME: "waltz"
+      DB_USER: "waltz"
+      DB_PASSWORD: "waltz"
 
   postgres:
     image: postgres:10.6
-    container_name: postgres
-    hostname: postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U waltz -d waltz"]
       interval: 15s

@@ -11,17 +11,19 @@ export WALTZ_FROM_EMAIL=${WALTZ_FROM_EMAIL:-"help@finos.org"}
 export WALTZ_BASE_URL=${WALTZ_BASE_URL:-"http://127.0.0.1:8080/"}
 export CHANGELOG_FILE=${CHANGELOG_FILE:-"/opt/waltz/liquibase/db.changelog-master.xml"}
 
+check=$(pg_isready --host="${DB_HOST}" --port="${DB_PORT}" --username="${DB_USER}" --dbname="${DB_NAME}")
+
 db_action () {
-    while [[ $(pg_isready -U "${DB_USER}" -h "${DB_HOST}" -p "${DB_PORT}" -d "${DB_NAME}") != *"accepting connections"* ]]
+    while [[ $check != *"accepting connections"* ]]
     do
         echo ">>> Database is not ready yet."
-        sleep 10s
+        echo $DB_HOST $DB_PORT $DB_NAME $DB_USER $DB_PASSWORD $DB_SCHEME $WALTZ_FROM_EMAIL $WALTZ_BASE_URL $CHANGELOG_FILE
+        sleep 5s
     done
-    
-    pg_isready -U "${DB_USER}" -h "${DB_HOST}" -p "${DB_PORT}" -d "${DB_NAME}"
     echo ">>> Database is ready."
-    
+
     # changeLogFile must be relative path
+
     liquibase --changeLogFile=../../../${CHANGELOG_FILE} --hub-mode=off --username="${DB_USER}" --password="${DB_PASSWORD}" --url=jdbc:postgresql://"${DB_HOST}":"${DB_PORT}"/"${DB_NAME}" "$1"
     if [ $? -eq 0 ]; then
         echo ">>> Database updated."
@@ -32,7 +34,7 @@ db_action () {
 }
 
 run_waltz () {
-    envsubst < /home/waltz/.waltz/waltz-template.properties > /home/waltz/.waltz/waltz.properties
+    envsubst < /home/waltz/.waltz/waltz-template > /home/waltz/.waltz/waltz.properties
     catalina.sh run
 }
 
