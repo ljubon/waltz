@@ -17,7 +17,6 @@ db_action () {
     while [[ $check != *"accepting connections"* ]]
     do
         echo ">>> Database is not ready yet."
-        echo $DB_HOST $DB_PORT $DB_NAME $DB_USER $DB_PASSWORD $DB_SCHEME $WALTZ_FROM_EMAIL $WALTZ_BASE_URL $CHANGELOG_FILE
         sleep 5s
     done
     echo ">>> Database is ready."
