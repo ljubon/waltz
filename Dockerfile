@@ -24,5 +24,5 @@ EXPOSE 8080
 
 USER waltz
 
-ENTRYPOINT [ "/usr/local/bin/docker-entrypoint.sh" ]
+ENTRYPOINT [ "docker-entrypoint.sh" ]
 CMD [ "update",  "run" ]
