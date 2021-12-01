@@ -2,11 +2,11 @@ name: Docker
 
 on:
   push:
-    branches: [ master ]
+    tags: ['*']
   
 jobs:
   build:
-    name: Build and push Waltz image - postgresql
+    name: Build and push Waltz image
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -18,7 +18,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U waltz -d waltz"
+          --health-cmd pg_isready
           --health-interval 10s 
           --health-timeout 5s 
           --health-retries 10
@@ -54,4 +54,4 @@ jobs:
       with:
         context: .
         push: true
-        tags: ghcr.io/${{ github.repository }}:postgresql 
+        tags: ghcr.io/${{ github.repository }}-postgresql:${{ github.ref_name }} 
