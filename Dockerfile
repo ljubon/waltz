@@ -4,7 +4,7 @@ ENV PATH="/usr/local/bin/liquibase:${PATH}"
 
 COPY docker/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY ./waltz-data/src/main/ddl/liquibase/*.xml /opt/waltz/liquibase/
-COPY ./waltz-web/target/waltz-web.war /usr/local/tomcat/webapps
+COPY ./waltz-web/target/waltz-web.war /usr/local/tomcat/webapps/ROOT.war
 COPY docker/waltz.properties /home/waltz/.waltz/waltz-template
 COPY waltz-web/src/main/resources/logback.example.xml /home/waltz/.waltz/waltz-logback.xml
 
