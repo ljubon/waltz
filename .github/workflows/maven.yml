@@ -3,7 +3,10 @@
 
 name: Waltz Build (pg)
 
-on: push
+on:
+  push:
+    tags: ['*']
+    branches: ['*']
       
 jobs:
   build:
@@ -68,3 +71,28 @@ jobs:
           waltz-data/target/liquibase-scripts.zip
           waltz-web/target/waltz-web.war
           waltz-web/target/waltz-web-jar-with-dependencies.jar
+
+    - name: Dump GitHub context
+      run: echo "$GITHUB_CONTEXT"
+      env:
+        GITHUB_CONTEXT: ${{ toJSON(github) }}
+
+    - name: Login to GitHub Registry
+      if: ${{ github.ref_type == 'tag' }}
+      uses: docker/login-action@v1
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build Docker image
+      if: ${{ github.ref_type == 'tag' }}
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository }}:postgresql-${{ github.ref_name }}
+          ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          ghcr.io/${{ github.repository }}:postgresql 
+          ghcr.io/${{ github.repository }}:latest
