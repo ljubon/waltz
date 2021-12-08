@@ -1,19 +1,22 @@
 
 
-# Run Waltz
+# Run Waltz as a container
 
 ### Pre Requisites
 
 * Docker
-* Postgres DB instance
+* Postgres DB instance (optional, can run in Docker instead)
 
 # Configuration
 
-- Container will use default values to connect Waltz to DB and try to `update` Postgres database and `run` Waltz.
-- You can change this with providing environment variables to container or as part of [docker-compose.yml](../docker-compose.yml)
+- The Waltz container will use default values to connect its DB.
+- By default it will try to `update` its DB and then `run` Waltz.
+- You can change this by providing environment variables to the container on the command line or as part of [docker-compose.yml](../docker-compose.yml)
 
 ## Default values and actions
- Container will execute two commands `update` and `run`. First command will `update` the database instance running `liquibase` command with default parameters for PostgreSQL instance listed below. Second command `run` will execute `catalina run` database and `run` Waltz.
+The container will execute two commands: `update` and `run`. The first command will `update` the database instance by running `liquibase` against it. The second command `run` will execute `catalina.sh run` to `run` Waltz.
+
+The default parameters are listed below:
 
 * `DB_HOST="postgres"`
 * `DB_PORT="5432"`
@@ -27,25 +30,24 @@
 
 # Running
 
-## Docker run
-
-Run waltz without updating database:
-
-    $> docker run -it ghcr.io/[OWNER]/[REPO]:postgresql run
-
-Run Waltz with updating new database:
-
-    $> docker run -it ghcr.io/[OWNER]/[REPO]:postgresql \
-      -e "DB_HOST=postgres" \
-      -e "DB_NAME=waltz" \
-      -e "DB_USER=waltz" \
-      -e "DB_PASSWORD=waltz" \
-      update run
-
-## Docker-compose
-
-To start you can use [docker-compose.yml](../docker-compose.yml) and run it with:
+## Docker Compose
+To start Waltz with a Postgres instance in just one command, you can use [docker-compose.yml](../docker-compose.yml) and run it with:
 
     $> docker-compose up -d 
 
-Once container is up you can access Waltz dashboard on [http://127.0.0.1:8080/](http://127.0.0.1:8080/)
+Once the container is up you can access the Waltz dashboard on [http://127.0.0.1:8080/](http://127.0.0.1:8080/)
+
+## Docker run
+
+Run waltz without updating the database:
+
+    $> docker run -it ghcr.io/finos/waltz run
+
+Update the database and run Waltz with new parameters:
+
+    $> docker run -it ghcr.io/finos/waltz \
+      -e "DB_HOST=existing_db" \
+      -e "DB_PORT=5544" \
+      -e "DB_NAME=demo" \
+      -e "DB_USER=waltz" \
+      -e "DB_PASSWORD=12345" update run
