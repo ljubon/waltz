@@ -31,7 +31,7 @@ The default parameters are listed below:
 # Running
 
 ## Docker Compose
-To start Waltz with a Postgres instance in just one command, you can use [docker-compose.yml](../docker-compose.yml) and run it with:
+To start Waltz with a Postgres instance in just one command, you can use [docker-compose.yml](../docker-compose.yml) and run it with:man systemd.unit
 
     $> docker-compose up -d 
 
@@ -41,13 +41,24 @@ Once the container is up you can access the Waltz dashboard on [http://127.0.0.1
 
 Run waltz without updating the database:
 
-    $> docker run -it ghcr.io/finos/waltz run
+    $> docker run -p 8080:8080 -it ghcr.io/finos/waltz run
 
-Update the database and run Waltz with new parameters:
+Update the database and run Waltz with fresh database:
 
     $> docker run -it ghcr.io/finos/waltz \
-      -e "DB_HOST=existing_db" \
-      -e "DB_PORT=5544" \
+      -p 8080:8080 \
+      -e "DB_HOST=IP_or_FQDN" \
+      -e "DB_PORT=5432" \
       -e "DB_NAME=demo" \
-      -e "DB_USER=waltz" \
-      -e "DB_PASSWORD=12345" update run
+      -e "DB_USER=user" \
+      -e "DB_PASSWORD=password" update run
+
+Only run Waltz with pre-configured database:
+
+    $> docker run -it ghcr.io/finos/waltz \
+      -p 8080:8080 \
+      -e "DB_HOST=IP_or_FQDN" \
+      -e "DB_PORT=5432" \
+      -e "DB_NAME=demo" \
+      -e "DB_USER=user" \
+      -e "DB_PASSWORD=password" run

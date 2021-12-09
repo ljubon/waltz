@@ -75,9 +75,9 @@ jobs:
         context: .
         push: ${{ github.ref_type == 'tag' }}
         tags: |
-          ghcr.io/${{ github.repository }}:postgresql-${{ github.ref_name }}
+          ghcr.io/${{ github.repository }}:postgres-${{ github.ref_name }}
           ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-          ghcr.io/${{ github.repository }}:postgresql 
+          ghcr.io/${{ github.repository }}:postgres
           ghcr.io/${{ github.repository }}:latest
 
     - name: Release
