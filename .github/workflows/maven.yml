@@ -34,6 +34,15 @@ jobs:
         java-version: '8'
         distribution: 'adopt'
 
+    - id: lowercase
+      name: Enforce lowercase for repo name
+      if: ${{ github.ref_type == 'tag' }}
+      run: |
+        lowerCase=$(echo "${repoName}" | tr "[:upper:]" "[:lower:]"")
+        echo ::set-output name=REPO_LC::$lowerCase"
+      env:
+        repoName: '${{ github.repository }}'
+
     - name: Cache Maven packages    
       uses: actions/cache@v1
       with:
@@ -75,10 +84,11 @@ jobs:
         context: .
         push: ${{ github.ref_type == 'tag' }}
         tags: |
-          ghcr.io/${{ github.repository }}:postgres-${{ github.ref_name }}
-          ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-          ghcr.io/${{ github.repository }}:postgres
-          ghcr.io/${{ github.repository }}:latest
+          ghcr.io/${{ steps.lowercase.outputs.REPO_LC}}:postgres-${{ github.ref_name }}
+          ghcr.io/${{ steps.lowercase.outputs.REPO_LC}}:${{ github.ref_name }}
+          ghcr.io/${{ steps.lowercase.outputs.REPO_LC}}:postgres
+          ghcr.io/${{ steps.lowercase.outputs.REPO_LC}}:latest
+
 
     - name: Release
       uses: softprops/action-gh-release@v1
