@@ -68,12 +68,13 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Enforce lowercase for repo name
+    - id: lowercase
+      name: Enforce lowercase for repo name
       if: ${{ github.ref_type == 'tag' }}
       run: |
-        echo "REPO_LC=${REPO,,}" >>${GITHUB_ENV}
+        echo ::set-output name=REPO_LC::"${repoName,,}"
       env:
-        REPO: '${{ github.repository }}'
+        repoName: '${{ github.repository }}'
 
     - name: Build and push Docker image
       if: ${{ github.ref_type == 'tag' }}
@@ -82,12 +83,12 @@ jobs:
         context: .
         push: ${{ github.ref_type == 'tag' }}
         tags: |
-          ghcr.io/${REPO}:postgres-${{ github.ref_name }}
-          ghcr.io/${REPO}:${{ github.ref_name }}
-          ghcr.io/${REPO}:postgres
-          ghcr.io/${REPO}:latest
+          ghcr.io/${{ env.repoName }}:postgres-${{ github.ref_name }}
+          ghcr.io/${{ env.repoName }}:${{ github.ref_name }}
+          ghcr.io/${{ env.repoName }}:postgres
+          ghcr.io/${{ env.repoName }}:latest
       env:
-        REPO: ${REPO_LC}
+        repoName: "${{ steps.lowercase.outputs.REPO_LC}}"
 
     - name: Release
       uses: softprops/action-gh-release@v1
