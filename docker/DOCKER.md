@@ -55,7 +55,7 @@ Once the container is up you can access the Waltz dashboard on [http://127.0.0.1
 
 Run waltz without updating the database:
 
-    $> docker run ghcr.io/finos/waltz \
+    $> docker run ghcr.io/G-Research/waltz \
       -p 8080:8080 \
       -e "DB_HOST=IP_or_FQDN" \
       -e "DB_PORT=5432" \
@@ -66,7 +66,7 @@ Run waltz without updating the database:
 
 Update the database and run Waltz with fresh database:
 
-    $> docker run ghcr.io/finos/waltz \
+    $> docker run ghcr.io/G-Research/waltz \
       -p 8080:8080 \
       -e "DB_HOST=IP_or_FQDN" \
       -e "DB_PORT=5432" \
