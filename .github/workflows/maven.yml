@@ -77,7 +77,7 @@ jobs:
         flavor: latest=true
         tags: |
           type=ref,event=tag
-          type=semver,pattern={{raw}}
+          type=raw,pattern={{raw}}
           type=raw,value=postgres-${{ github.ref_name }}
           type=raw,value=postgres
 
