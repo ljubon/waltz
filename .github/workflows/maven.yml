@@ -75,8 +75,9 @@ jobs:
       with:
         images: ghcr.io/${{ github.repository }}
         tags: |
-          type=raw,value=postgres-${{ github.ref_name }}
+          type=ref,event=branch
           type=semver,pattern={{raw}}
+          type=raw,value=postgres-${{ github.ref_name }}
           type=raw,value=postgres
 
     - name: Build and push Docker image
