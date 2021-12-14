@@ -74,8 +74,9 @@ jobs:
       uses: docker/metadata-action@v3
       with:
         images: ghcr.io/${{ github.repository }}
+        flavor: latest=true
         tags: |
-          type=ref,event=branch
+          type=ref,event=tag
           type=semver,pattern={{raw}}
           type=raw,value=postgres-${{ github.ref_name }}
           type=raw,value=postgres
