@@ -68,13 +68,18 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - id: lowercase
-      name: Enforce lowercase for repo name
+    - name: Docker meta
+      id: meta
       if: ${{ github.ref_type == 'tag' }}
-      run: |
-        echo ::set-output name=REPO_LC::"${repoName,,}"
-      env:
-        repoName: '${{ github.repository }}'
+      uses: docker/metadata-action@v3
+      with:
+        images: ghcr.io/${{ github.repository }}
+        flavor: latest=true
+        tags: |
+          type=ref,event=tag
+          type=semver,pattern={{raw}}
+          type=raw,value=postgres-${{ github.ref_name }}
+          type=raw,value=postgres
 
     - name: Build and push Docker image
       if: ${{ github.ref_type == 'tag' }}
@@ -82,13 +87,7 @@ jobs:
       with:
         context: .
         push: ${{ github.ref_type == 'tag' }}
-        tags: |
-          ghcr.io/${{ env.repoName }}:postgres-${{ github.ref_name }}
-          ghcr.io/${{ env.repoName }}:${{ github.ref_name }}
-          ghcr.io/${{ env.repoName }}:postgres
-          ghcr.io/${{ env.repoName }}:latest
-      env:
-        repoName: "${{ steps.lowercase.outputs.REPO_LC}}"
+        tags: ${{ steps.meta.outputs.tags }}
 
     - name: Release
       uses: softprops/action-gh-release@v1
