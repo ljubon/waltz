@@ -75,7 +75,7 @@ jobs:
         flavor: latest=true
         tags: |
           type=ref,event=branch
-          type=ref,event=branch,prefix="postgres-"
+          type=ref,event=branch,prefix=postgres-
           type=ref,event=tag,enable=${{ github.ref_type == 'tag' }}
           type=raw,value=postgres-${{ github.ref_name }},enable=${{ github.ref_type == 'tag' }}
           type=raw,value=postgres
