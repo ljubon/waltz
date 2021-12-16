@@ -68,17 +68,24 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v3
+      with:
+        images: ghcr.io/${{ github.repository }}
+        flavor: latest=true
+        tags: |
+          type=ref,event=tag,enable=${{ github.ref_type == 'tag' }}
+          type=raw,value=postgres-${{ github.ref_name }},enable=${{ github.ref_type == 'tag' }}
+          type=raw,value=postgres
+
     - name: Build and push Docker image
-      if: ${{ github.ref_type == 'tag' }}
       uses: docker/build-push-action@v2
       with:
         context: .
         push: ${{ github.ref_type == 'tag' }}
-        tags: |
-          ghcr.io/${{ github.repository }}:postgres-${{ github.ref_name }}
-          ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-          ghcr.io/${{ github.repository }}:postgres
-          ghcr.io/${{ github.repository }}:latest
+        labels: ${{ steps.meta.outputs.labels }}
+        tags: ${{ steps.meta.outputs.tags }}
 
     - name: Release
       uses: softprops/action-gh-release@v1
