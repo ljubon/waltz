@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "waltz.fullname" . }}
+  labels:
+    {{- include "waltz.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "waltz.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "waltz.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: waltz-http
+              containerPort: {{ .Values.waltz.waltzPort }}
+              protocol: TCP
+            - name: waltz
+              containerPort: {{ .Values.waltz.waltzHttpPort }}
+              protocol: TCP
+          env:          
+            - name: "DB_HOST"
+              value: "{{ .Values.waltz.dbHost }}"
+            - name: "DB_PORT"
+              value: "{{ .Values.waltz.dbPort }}"
+            - name: "DB_NAME"
+              value: "{{ .Values.waltz.dbName }}"
+            - name: "DB_USER"
+              value: "{{ .Values.waltz.dbUser }}"
+            - name: "DB_PASSWORD"
+              value: "{{ .Values.waltz.dbPass  }}"
+            - name: "DB_SCHEME"
+              value: "{{ .Values.waltz.dbScheme }}"
+            - name: "WALTZ_BASE_URL"
+              value: "{{ .Values.waltz.waltzBaseUrl }}"
+            - name: "WALTZ_FROM_EMAIL"
+              value: "{{ .Values.waltz.waltzFromEmail }}"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      initContainers:
+        - name: schema-generate
+          image: liquibase/liquibase:4.4.3
+          command: ["sh", "-c","sleep 9999"]
+          # command: ["sh", "-c", "docker-entrypoint.sh --url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME} --changeLogFile=./changelog/{{ .Values.mounts.changelogName }} --hub-mode=off --username=${DB_USER} --password=${DB_PASSWORD} update"]
+          env:
+            - name: "DB_HOST"
+              value: "{{ .Values.waltz.dbHost }}"
+            - name: "DB_PORT"
+              value: "{{ .Values.waltz.dbPort }}"
+            - name: "DB_NAME"
+              value: "{{ .Values.waltz.dbName }}"
+            - name: "DB_USER"
+              value: "{{ .Values.waltz.dbUser }}"
+            - name: "DB_PASSWORD"
+              value: "{{ .Values.waltz.dbPass }}"
+          volumeMounts:
+            - name: changelog
+              mountPath: "/liquibase/changelog"
+      volumes:
+        - name: changelog
+          hostPath:
+            path: "{{ .Values.mounts.changelogPath }}"
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

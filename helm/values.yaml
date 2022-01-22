@@ -1,0 +1,72 @@
+# Default values for waltz.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: ljubon/waltz
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+waltz:
+  waltzPort: 8000
+  waltzHttpPort: 8080
+  waltzFromEmail: ljubonikolic@gmail.com
+  waltzBaseUrl: http://127.0.0.1:8000/
+  dbHost: postgres-postgresql
+  dbPort: 5432
+  dbName: waltz
+  dbUser: postgres
+  # dbScheme: waltz
+  dbPass: waltz
+
+mounts:
+  changelogPath: "/hosthome/waltz-data/src/main/ddl/liquibase" 
+  changelogName: "db.changelog-master.xml"
+  # dumpPath: "/host" 
+  # dumpFileName: "dump.sql"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: localhost
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources: {}
+
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
