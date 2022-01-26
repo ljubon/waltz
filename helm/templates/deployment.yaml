@@ -60,9 +60,8 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
       initContainers:
         - name: schema-generate
-          image: liquibase/liquibase:4.4.3
-          command: ["sh", "-c","sleep 9999"]
-          # command: ["sh", "-c", "docker-entrypoint.sh --url=jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME} --changeLogFile=./changelog/{{ .Values.mounts.changelogName }} --hub-mode=off --username=${DB_USER} --password=${DB_PASSWORD} update"]
+          image: ljubon/liquidbase
+          # command: ["sh","-c","sleep 9999"]
           env:
             - name: "DB_HOST"
               value: "{{ .Values.waltz.dbHost }}"
@@ -74,13 +73,8 @@ spec:
               value: "{{ .Values.waltz.dbUser }}"
             - name: "DB_PASSWORD"
               value: "{{ .Values.waltz.dbPass }}"
-          volumeMounts:
-            - name: changelog
-              mountPath: "/liquibase/changelog"
-      volumes:
-        - name: changelog
-          hostPath:
-            path: "{{ .Values.mounts.changelogPath }}"
+            - name: "CHANGE_LOG_NAME"
+              value: "{{ .Values.waltz.changelogName }}"
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

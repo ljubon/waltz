@@ -17,20 +17,15 @@ service:
 waltz:
   waltzPort: 8000
   waltzHttpPort: 8080
-  waltzFromEmail: ljubonikolic@gmail.com
+  waltzFromEmail: help@finos.org
   waltzBaseUrl: http://127.0.0.1:8000/
   dbHost: postgres-postgresql
   dbPort: 5432
   dbName: waltz
   dbUser: postgres
-  # dbScheme: waltz
   dbPass: waltz
-
-mounts:
-  changelogPath: "/hosthome/waltz-data/src/main/ddl/liquibase" 
+  dbScheme: waltz
   changelogName: "db.changelog-master.xml"
-  # dumpPath: "/host" 
-  # dumpFileName: "dump.sql"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -39,10 +34,8 @@ fullnameOverride: ""
 podAnnotations: {}
 
 podSecurityContext: {}
-  # fsGroup: 2000
 
 securityContext: {}
-
 
 ingress:
   enabled: false
@@ -57,13 +50,8 @@ ingress:
 
 resources: {}
 
-
 autoscaling:
   enabled: false
-  minReplicas: 1
-  maxReplicas: 100
-  targetCPUUtilizationPercentage: 80
-  # targetMemoryUtilizationPercentage: 80
 
 nodeSelector: {}
 
