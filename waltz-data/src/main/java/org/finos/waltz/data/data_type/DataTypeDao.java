@@ -18,13 +18,21 @@
 
 package org.finos.waltz.data.data_type;
 
-import org.finos.waltz.schema.tables.records.DataTypeRecord;
 import org.finos.waltz.data.FindEntityReferencesByIdSelector;
 import org.finos.waltz.model.EntityKind;
+import org.finos.waltz.model.EntityLifecycleStatus;
 import org.finos.waltz.model.EntityReference;
 import org.finos.waltz.model.datatype.DataType;
+import org.finos.waltz.model.datatype.DataTypeMigrationResult;
 import org.finos.waltz.model.datatype.ImmutableDataType;
-import org.jooq.*;
+import org.finos.waltz.schema.tables.records.DataTypeRecord;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Record;
+import org.jooq.Record1;
+import org.jooq.RecordMapper;
+import org.jooq.Select;
+import org.jooq.SelectConditionStep;
 import org.jooq.impl.DSL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
@@ -32,14 +40,15 @@ import org.springframework.stereotype.Repository;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
-import static org.finos.waltz.schema.Tables.LOGICAL_FLOW;
-import static org.finos.waltz.schema.Tables.LOGICAL_FLOW_DECORATOR;
-import static org.finos.waltz.schema.tables.DataType.DATA_TYPE;
 import static org.finos.waltz.common.Checks.checkNotEmpty;
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.common.StringUtilities.mkSafe;
 import static org.finos.waltz.data.JooqUtilities.TO_ENTITY_REFERENCE;
+import static org.finos.waltz.schema.Tables.LOGICAL_FLOW;
+import static org.finos.waltz.schema.Tables.LOGICAL_FLOW_DECORATOR;
+import static org.finos.waltz.schema.tables.DataType.DATA_TYPE;
 
 
 @Repository
@@ -68,6 +77,12 @@ public class DataTypeDao implements FindEntityReferencesByIdSelector {
         this.dsl = dsl;
     }
 
+    public DataTypeMigrationResult migrate(Long fromId, Long toId, boolean deleteOldDataType) {
+        return dsl.transactionResult(ctx -> {
+            DSLContext tx = ctx.dsl();
+            return DataTypeUtilities.migrate(tx, fromId, toId, deleteOldDataType);
+        });
+    }
 
     public List<DataType> findAll() {
         return dsl
@@ -87,6 +102,17 @@ public class DataTypeDao implements FindEntityReferencesByIdSelector {
                 .from(DATA_TYPE)
                 .where(DATA_TYPE.ID.in(selector))
                 .fetch(TO_ENTITY_REFERENCE);
+    }
+
+
+    public Set<DataType> findByIdSelector(Select<Record1<Long>> selector) {
+        checkNotNull(selector, "selector cannot be null");
+
+        return dsl
+                .select(DATA_TYPE.asterisk())
+                .from(DATA_TYPE)
+                .where(DATA_TYPE.ID.in(selector))
+                .fetchSet(TO_DOMAIN);
     }
 
 
@@ -118,24 +144,37 @@ public class DataTypeDao implements FindEntityReferencesByIdSelector {
     }
 
 
-    public List<DataType> findSuggestedBySourceEntityRef(EntityReference source) {
+    public Set<DataType> findSuggestedByEntityRef(EntityReference source) {
 
         Condition isSourceOrTarget = LOGICAL_FLOW.SOURCE_ENTITY_ID.eq(source.id())
-                .and(LOGICAL_FLOW.SOURCE_ENTITY_KIND.eq(source.kind().name()))
-                .or(LOGICAL_FLOW.TARGET_ENTITY_ID.eq(source.id())
-                        .and(LOGICAL_FLOW.TARGET_ENTITY_KIND.eq(source.kind().name())));
+            .and(LOGICAL_FLOW.SOURCE_ENTITY_KIND.eq(source.kind().name()))
+            .or(LOGICAL_FLOW.TARGET_ENTITY_ID.eq(source.id())
+                .and(LOGICAL_FLOW.TARGET_ENTITY_KIND.eq(source.kind().name())));
+
+        Condition flowIsActive = LOGICAL_FLOW.IS_REMOVED
+                .isFalse()
+                .and(LOGICAL_FLOW.ENTITY_LIFECYCLE_STATUS.in(EntityLifecycleStatus.ACTIVE.name()));
 
         SelectConditionStep<Record1<Long>> logicalFlowsForSource = DSL
-                .select(LOGICAL_FLOW.ID)
-                .from(LOGICAL_FLOW)
-                .where(isSourceOrTarget);
+            .select(LOGICAL_FLOW.ID)
+            .from(LOGICAL_FLOW)
+            .where(isSourceOrTarget).and(flowIsActive);
 
         return dsl
-                .selectDistinct(DATA_TYPE.asterisk())
+            .selectDistinct(DATA_TYPE.asterisk())
+            .from(DATA_TYPE)
+            .innerJoin(LOGICAL_FLOW_DECORATOR).on(DATA_TYPE.ID.eq(LOGICAL_FLOW_DECORATOR.DECORATOR_ENTITY_ID)
+                .and(LOGICAL_FLOW_DECORATOR.DECORATOR_ENTITY_KIND.eq(EntityKind.DATA_TYPE.name())))
+            .where(LOGICAL_FLOW_DECORATOR.LOGICAL_FLOW_ID.in(logicalFlowsForSource))
+            .fetchSet(TO_DOMAIN);
+    }
+
+    public Collection<DataType> findByParentId(long id) {
+        return dsl
+                .selectDistinct(DATA_TYPE.fields())
                 .from(DATA_TYPE)
-                .innerJoin(LOGICAL_FLOW_DECORATOR).on(DATA_TYPE.ID.eq(LOGICAL_FLOW_DECORATOR.DECORATOR_ENTITY_ID)
-                        .and(LOGICAL_FLOW_DECORATOR.DECORATOR_ENTITY_KIND.eq(EntityKind.DATA_TYPE.name())))
-                .where(LOGICAL_FLOW_DECORATOR.LOGICAL_FLOW_ID.in(logicalFlowsForSource))
-                .fetch(TO_DOMAIN);
+                .where(DATA_TYPE.PARENT_ID.eq(id))
+                .orderBy(DATA_TYPE.NAME)
+                .fetchSet(TO_DOMAIN);
     }
 }

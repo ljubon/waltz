@@ -4,31 +4,63 @@
     import Icon from "../../../common/svelte/Icon.svelte";
 
     import {ratingSchemeStore} from "../../../svelte-stores/rating-schemes";
-    import {assessmentRatingStore} from "../../../svelte-stores/assessment-rating";
-    import {getRequiredFields, possibleVisibility, possibleEntityKinds} from "./assessment-definition-utils";
-
+    import {assessmentRatingStore} from "../../../svelte-stores/assessment-rating-store";
+    import {
+        getRequiredFields,
+        possibleVisibility,
+        possibleAssessmentKinds,
+        selectedDefinition
+    } from "./assessment-definition-utils";
+    import {measurableCategoryStore} from "../../../svelte-stores/measurable-category-store";
+    import {legalEntityRelationshipKindStore} from "../../../svelte-stores/legal-entity-relationship-kind-store";
+    import {toEntityRef} from "../../../common/entity-utils";
 
     export let doCancel;
     export let doSave;
-    export let definition;
 
-    const ratingSchemesCall = ratingSchemeStore.loadAll();
-
-    let hasRatings = false;
-    let workingCopy = _.cloneDeep(definition);
-    let savePromise = null;
-
-    $: ratingCall = assessmentRatingStore.findByDefinitionId(definition.id);
-    $: ratings = $ratingCall.data;
-    $: hasRatings = ratings.length > 0;
-
-    $: possibleRatingSchemes = _.sortBy($ratingSchemesCall.data, d => d.name);
-
-    $: invalid = _.some(getRequiredFields(workingCopy), v => _.isEmpty(v));
+    const qualifiableKinds = _
+        .chain(possibleAssessmentKinds)
+        .reject(d => _.isNil(d.qualifierKind))
+        .map(d => d.value)
+        .value();
 
     function save() {
-        savePromise = doSave(workingCopy);
+        const def = Object.assign({}, $selectedDefinition);
+        if (! _.includes(qualifiableKinds, $selectedDefinition.entityKind)) {
+            def.qualifierReference = null;
+        }
+        savePromise = doSave(def);
     }
+
+    const ratingSchemesCall = ratingSchemeStore.loadAll();
+    const measurableCategoryCall = measurableCategoryStore.findAll();
+    const legalEntityRelationshipKindCall = legalEntityRelationshipKindStore.findAll();
+
+    let ratings = [];
+    let measurableCategories = [];
+    let legalEntityRelationshipKinds = [];
+    let hasRatings = false;
+    let savePromise = null;
+    let ratingCall;
+    let hasMultiValuesAssessmentsCall;
+    let canEditCardinality = true;
+
+    $: {
+        if ($selectedDefinition.id) {
+            ratingCall = assessmentRatingStore.findByDefinitionId($selectedDefinition.id);
+            hasMultiValuesAssessmentsCall = assessmentRatingStore.hasMultiValuedAssessments($selectedDefinition.id);
+        }
+    }
+
+    $: canEditCardinality = !$selectedDefinition.id || !$hasMultiValuesAssessmentsCall?.data; // allow edit for new categories without check
+    $: ratings = $ratingCall?.data || [];
+    $: possibleRatingSchemes = _.sortBy($ratingSchemesCall.data, d => d.name);
+    $: measurableCategories = _.map($measurableCategoryCall?.data || [], d => toEntityRef(d));
+    $: legalEntityRelationshipKinds = _.map($legalEntityRelationshipKindCall?.data || [], d => toEntityRef(d));
+
+    $: hasRatings = ratings.length > 0;
+    $: invalid = _.some(getRequiredFields($selectedDefinition), v => _.isNil(v));
+    $: qualifierKind = _.find(possibleAssessmentKinds, d => d.value === $selectedDefinition.entityKind)?.qualifierKind;
 </script>
 
 
@@ -37,7 +69,7 @@
 
     <div class="row">
         <div class="col-md-12">
-            <h3>{definition.name || "NEW"}</h3>
+            <h3>{$selectedDefinition.name || "Creating New Assessment Definition"}</h3>
         </div>
     </div>
 
@@ -53,7 +85,7 @@
                        id="name"
                        required="required"
                        placeholder="Name of assessment"
-                       bind:value={workingCopy.name}>
+                       bind:value={$selectedDefinition.name}>
                 <div class="help-block">
                     Short name which describes this assessment
                 </div>
@@ -65,7 +97,7 @@
                 </label>
                 <select id="ratingScheme"
                         disabled={hasRatings}
-                        bind:value={workingCopy.ratingSchemeId}>
+                        bind:value={$selectedDefinition.ratingSchemeId}>
                     {#each possibleRatingSchemes as r}
                         <option value={r.id}>
                             {r.name}
@@ -88,9 +120,9 @@
                 </label>
                 <select id="entityKind"
                         disabled={hasRatings}
-                        bind:value={workingCopy.entityKind}>
+                        bind:value={$selectedDefinition.entityKind}>
 
-                        {#each possibleEntityKinds as k}
+                    {#each possibleAssessmentKinds as k}
                         <option value={k.value}>
                             {k.name}
                         </option>
@@ -103,8 +135,43 @@
                         <Icon name="warning"/>
                         The associated entity kind for this definition cannot be changed as ratings already exist.
                     {/if}
-
                 </div>
+
+                <!-- QUALIFIER: MEASURABLE_CATEGORY -->
+                {#if qualifierKind === "MEASURABLE_CATEGORY"}
+                    <label for="measurableCategory">
+                        Qualifier: Measurable Category
+                        <small class="text-muted">(required)</small>
+                    </label>
+                    <select id="measurableCategory"
+                            disabled={hasRatings}
+                            bind:value={$selectedDefinition.qualifierReference}>
+
+                        {#each measurableCategories as mc}
+                            <option value={mc}>
+                                {mc.name}
+                            </option>
+                        {/each}
+                    </select>
+                {/if}
+
+                <!-- QUALIFIER: LEGAL_ENTITY_RELATIONSHIP_KIND -->
+                {#if qualifierKind === "LEGAL_ENTITY_RELATIONSHIP_KIND"}
+                    <label for="legalEntityRelationshipKind">
+                        Qualifier: Legal Entity Relationship Kind
+                        <small class="text-muted">(required)</small>
+                    </label>
+                    <select id="legalEntityRelationshipKind"
+                            disabled={hasRatings}
+                            bind:value={$selectedDefinition.qualifierReference}>
+
+                        {#each legalEntityRelationshipKinds as lerk}
+                            <option value={lerk}>
+                                {lerk.name}
+                            </option>
+                        {/each}
+                    </select>
+                {/if}
 
 
                 <!-- DESCRIPTION -->
@@ -117,7 +184,7 @@
                           rows="12"
                           style="width: 100%"
                           required="required"
-                          bind:value={workingCopy.description}/>
+                          bind:value={$selectedDefinition.description}/>
                 <div class="help-block">
                     HTML or markdown code, any paths should be absolute
                 </div>
@@ -133,27 +200,34 @@
                 <input class="form-control"
                        id="externalId"
                        placeholder="External identifier"
-                       bind:value={workingCopy.externalId}>
+                       bind:value={$selectedDefinition.externalId}>
                 <div class="help-block">
-                    External identifiers help with data import/export as they <i>should not</i> change if the display name is updated
+                    External identifiers help with data import/export as they <i>should not</i> change if the display
+                    name is updated
                 </div>
 
                 <!--VISIBILITY-->
-                <label for="visibility">
-                    Assessment Visibility
-                    <small class="text-muted">(required)</small>
+                <label for="cardinality">
+                    Cardinality
                 </label>
-                <select id="visibility"
-                        bind:value={workingCopy.visibility}>
-                    {#each possibleVisibility as r}
-                        <option value={r.value}>
-                            {r.name}
-                        </option>
-                    {/each}
+                <select id="cardinality"
+                        disabled={!canEditCardinality}
+                        bind:value={$selectedDefinition.cardinality}>
+                    <option value="ZERO_ONE">
+                        Zero to One
+                    </option>
+                    <option value="ZERO_MANY">
+                        Zero to Many
+                    </option>
                 </select>
                 <div class="help-block">
-                    The visibility setting determines if the assessment is shown by default to all users.
-                    Please note that users are free to override these defaults and choose their own primary and secondary assessments.
+                    The cardinality determines the number of ratings that can be assigned to an entity for this
+                    assessment. Defaults to 'Zero to One'.
+                    {#if !canEditCardinality}
+                        <br>
+                        <Icon name="warning"/>
+                        The cardinality for this definition cannot be changed as multi-valued ratings already exist.
+                    {/if}
                 </div>
 
                 <!-- READ ONLY -->
@@ -162,9 +236,9 @@
                 </label>
                 <input type=checkbox
                        id="isReadOnly"
-                       bind:checked={workingCopy.isReadOnly}>
+                       bind:checked={$selectedDefinition.isReadOnly}>
                 <span class="text-muted">
-                    {#if workingCopy.isReadOnly}
+                    {#if $selectedDefinition.isReadOnly}
                         Yes, assessments are locked
                         <Icon name="lock"/>
                     {:else}
@@ -182,10 +256,41 @@
                 </label>
                 <input type=text
                        id="permittedRole"
-                       bind:value={workingCopy.permittedRole}>
+                       bind:value={$selectedDefinition.permittedRole}>
                 <div class="help-block">
                     If provided, restricts editing to users which have been assigned the role
                 </div>
+
+                <!-- GROUP -->
+                <label for="definitionGroup">
+                    Definition Group
+                </label>
+                <input type=text
+                       id="definitionGroup"
+                       bind:value={$selectedDefinition.definitionGroup}>
+                <div class="help-block">
+                    Used to group multiple definitions together, defaults to 'Uncategorized'
+                </div>
+
+                <!--VISIBILITY-->
+                <label for="visibility">
+                    Assessment Visibility
+                    <small class="text-muted">(required)</small>
+                </label>
+                <select id="visibility"
+                        bind:value={$selectedDefinition.visibility}>
+                    {#each possibleVisibility as r}
+                        <option value={r.value}>
+                            {r.name}
+                        </option>
+                    {/each}
+                </select>
+                <div class="help-block">
+                    The visibility setting determines if the assessment is shown by default to all users.
+                    Please note that users are free to override these defaults and choose their own primary and
+                    secondary assessments.
+                </div>
+
             </div>
         </div>
     </div>

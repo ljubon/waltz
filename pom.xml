@@ -15,15 +15,23 @@
   ~ See the License for the specific
   ~
   -->
-
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <!--
+    <parent>
+        <groupId>org.finos</groupId>
+        <artifactId>finos</artifactId>
+        <version>4</version>
+    </parent>
+    -->
+
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.finos</groupId>
     <artifactId>waltz</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.67-SNAPSHOT</version>
     <modules>
         <module>waltz-common</module>
         <module>waltz-model</module>
@@ -32,6 +40,8 @@
         <module>waltz-jobs</module>
         <module>waltz-data</module>
         <module>waltz-schema</module>
+        <module>waltz-test-common</module>
+        <module>waltz-integration-test</module>
         <!--TODO: find a better way of passing a logback configuration file-->
         <!--<module>waltz-local-config</module>-->
     </modules>
@@ -68,37 +78,42 @@
         <maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
 
         <annotation-api.version>1.3.2</annotation-api.version>
-        <archunit.version>0.14.1</archunit.version>
-        <freemarker.version>2.3.31</freemarker.version>
-        <hikari.version>3.4.1</hikari.version>
-        <immutables.version>2.8.8</immutables.version>
-        <jackson.version>2.12.2</jackson.version>
-        <jackson-jsr310.version>2.12.2</jackson-jsr310.version>
+        <archunit.version>1.0.1</archunit.version>
+        <freemarker.version>2.3.32</freemarker.version>
+        <h2.version>2.1.214</h2.version>
+        <hikari.version>3.4.5</hikari.version>
+        <immutables.version>2.9.3</immutables.version>
+        <jackson.version>2.15.2</jackson.version>
+        <jackson-jsr310.version>2.15.2</jackson-jsr310.version>
         <java.version>1.8</java.version>
         <javax.mail.version>1.4.7</javax.mail.version>
         <jbcrypt.version>0.4.3</jbcrypt.version>
-        <jgrapht.version>1.5.1</jgrapht.version>
-        <jool.version>0.9.14</jool.version>
+        <jgrapht.version>1.4.0</jgrapht.version>
+        <jool.version>0.9.15</jool.version>
         <jooq.version>3.13.2</jooq.version> <!--If this changes see issue #4553 -->
-        <junit.version>4.13</junit.version>
-        <jwt.version>3.14.0</jwt.version>
-        <liquibase.maven.version>3.5.1</liquibase.maven.version>
-        <logback.version>1.2.3</logback.version>
-        <pcollections.version>3.1.4</pcollections.version>
-        <poi.version>4.1.2</poi.version>
-        <slf4j.version>1.7.30</slf4j.version>
+        <junit.version>5.10.0</junit.version>
+        <jwt.version>4.3.0</jwt.version>
+        <mockito.version>4.11.0</mockito.version>  <!-- 5.3.1 is 9+ -->
+        <liquibase.maven.version>4.18.0</liquibase.maven.version>
+        <logback.version>1.3.8</logback.version> <!-- 1.4.x needs 9+ -->
+        <pcollections.version>4.0.1</pcollections.version>
+        <poi.version>5.2.4</poi.version>
+        <slf4j.version>2.0.7</slf4j.version>
         <spark.version>2.9.1</spark.version> <!-- 2.9.3 causes issues with tomcat -->
-        <spring.version>5.3.5</spring.version>
+        <spark-freemarker.version>2.7.1</spark-freemarker.version>
+        <spring.version>5.3.30</spring.version>
         <super-csv.version>2.4.0</super-csv.version>
-        <commons-jexl3.version>3.2.1</commons-jexl3.version>
+        <surefire.version>2.22.2</surefire.version>
+        <commons-jexl3.version>3.2.1</commons-jexl3.version>  <!-- 3.3.0 causes evaluation issues -->
 
         <timestamp>${maven.build.timestamp}</timestamp>
+        <playwright.skip>true</playwright.skip>
+        <jetty.version>9.4.55.v20240627</jetty.version>
     </properties>
 
 
     <dependencyManagement>
         <dependencies>
-
             <!-- web -->
             <dependency>
                 <groupId>com.sparkjava</groupId>
@@ -115,7 +130,32 @@
                 <artifactId>jBCrypt</artifactId>
                 <version>${jbcrypt.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.sparkjava</groupId>
+                <artifactId>spark-template-freemarker</artifactId>
+                <version>${spark-freemarker.version}</version>
+            </dependency>
 
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-util</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-io</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-webapp</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-server</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
 
             <!-- json -->
             <dependency>
@@ -136,6 +176,11 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.dataformat</groupId>
                 <artifactId>jackson-dataformat-yaml</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.dataformat</groupId>
+                <artifactId>jackson-dataformat-csv</artifactId>
                 <version>${jackson.version}</version>
             </dependency>
             <dependency>
@@ -190,6 +235,11 @@
                 <version>${spring.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-jdbc</artifactId>
+                <version>${spring.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.jooq</groupId>
                 <artifactId>jool-java-8</artifactId>
                 <version>${jool.version}</version>
@@ -207,6 +257,11 @@
             <dependency>
                 <groupId>org.jgrapht</groupId>
                 <artifactId>jgrapht-core</artifactId>
+                <version>${jgrapht.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jgrapht</groupId>
+                <artifactId>jgrapht-io</artifactId>
                 <version>${jgrapht.version}</version>
             </dependency>
             <dependency>
@@ -261,12 +316,20 @@
 
 
             <!-- test -->
+
             <dependency>
-                <groupId>junit</groupId>
-                <artifactId>junit</artifactId>
-                <version>${junit.version}</version>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-junit-jupiter</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
+            </dependency>
+
             <dependency>
                 <groupId>com.tngtech.archunit</groupId>
                 <artifactId>archunit</artifactId>
@@ -280,15 +343,29 @@
                 <scope>test</scope>
             </dependency>
 
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 
     <profiles>
         <profile>
-            <id>ci</id>
+            <id>integration-tests</id>
             <modules>
                 <module>waltz-integration-test</module>
             </modules>
+        </profile>
+        <profile>
+            <id>playwright-tests</id>
+            <properties>
+                <playwright.skip>false</playwright.skip>
+            </properties>
         </profile>
 
         <profile>
@@ -296,7 +373,7 @@
             <properties>
                 <jdbc.group>com.h2database</jdbc.group>
                 <jdbc.artifact>h2</jdbc.artifact>
-                <jdbc.version>1.4.200</jdbc.version>
+                <jdbc.version>2.1.212</jdbc.version>
                 <jdbc.driver>org.h2.Driver</jdbc.driver>
                 <jooq.dialect>H2</jooq.dialect>
                 <jooq.group>org.jooq</jooq.group>
@@ -428,9 +505,14 @@
         <profile>
             <id>dev-h2-inmem</id>
             <properties>
-                <database.url>jdbc:h2:tcp://localhost/mem:waltz;CASE_INSENSITIVE_IDENTIFIERS=TRUE</database.url>
+                <database.url>jdbc:h2:mem:waltz;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DATABASE_TO_UPPER=TRUE</database.url>
                 <database.user>sa</database.user>
                 <database.password>sa</database.password>
+<!--                <database.url>jdbc:h2:file:~/data/waltz/h2/waltzdb;DATABASE_TO_UPPER=false</database.url>-->
+<!--                <database.user>root</database.user>-->
+<!--                <database.password></database.password>-->
+                <database.schema>PUBLIC</database.schema>
+                <database.catalog></database.catalog>
             </properties>
         </profile>
 
@@ -477,7 +559,7 @@
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                     <optimize>true</optimize>
-                    <showDeprecation>true</showDeprecation>
+                    <showDeprecation>false</showDeprecation>
                     <showWarnings>true</showWarnings>
                     <useIncrementalCompilation>false</useIncrementalCompilation>
                 </configuration>
@@ -539,26 +621,68 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${surefire.version}</version>
+            </plugin>
+            <plugin>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${surefire.version}</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                            <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+
         </plugins>
     </build>
     <reporting>
         <plugins>
+            <!-- DISABLING: causes a build failure with message: "Unable to download NVD CVE 2022" -->
+<!--            <plugin>-->
+<!--                <groupId>org.owasp</groupId>-->
+<!--                <artifactId>dependency-check-maven</artifactId>-->
+<!--                <configuration>-->
+<!--                    <cveValidForHours>48</cveValidForHours>-->
+<!--                    &lt;!&ndash;<failBuildOnCVSS>7</failBuildOnCVSS>&ndash;&gt;-->
+<!--                    &lt;!&ndash;mavenSettingsProxyId>artifactory</mavenSettingsProxyId&ndash;&gt;-->
+<!--                </configuration>-->
+<!--                <reportSets>-->
+<!--                    <reportSet>-->
+<!--                        <reports>-->
+<!--                            <report>aggregate</report>-->
+<!--                        </reports>-->
+<!--                    </reportSet>-->
+<!--                </reportSets>-->
+<!--            </plugin>-->
             <plugin>
-                <groupId>org.owasp</groupId>
-                <artifactId>dependency-check-maven</artifactId>
-                <configuration>
-                    <cveValidForHours>48</cveValidForHours>
-                    <!--<failBuildOnCVSS>7</failBuildOnCVSS>-->
-                    <!--mavenSettingsProxyId>artifactory</mavenSettingsProxyId-->
-                </configuration>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-report-plugin</artifactId>
+                <version>2.19.1</version>
                 <reportSets>
                     <reportSet>
+                        <!-- defines aggregate unit test report -->
+                        <id>unit-tests-aggregate</id>
+                        <inherited>false</inherited>
                         <reports>
-                            <report>aggregate</report>
+                            <report>report</report>
                         </reports>
+                        <configuration>
+                            <aggregate>true</aggregate>
+                        </configuration>
                     </reportSet>
                 </reportSets>
             </plugin>
         </plugins>
     </reporting>
+
+
 </project>

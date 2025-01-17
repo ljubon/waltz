@@ -19,19 +19,25 @@
 package org.finos.waltz.data.notification;
 
 import org.finos.waltz.model.EntityKind;
+import org.finos.waltz.model.ReleaseLifecycleStatus;
 import org.finos.waltz.model.notification.ImmutableNotificationSummary;
 import org.finos.waltz.model.notification.NotificationSummary;
 import org.finos.waltz.model.survey.SurveyInstanceStatus;
-import org.jooq.*;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Record;
+import org.jooq.Record2;
+import org.jooq.RecordMapper;
+import org.jooq.Select;
 import org.jooq.impl.DSL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-import static org.finos.waltz.schema.Tables.*;
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.common.ListUtilities.asList;
+import static org.finos.waltz.schema.Tables.*;
 
 
 @Repository
@@ -77,11 +83,14 @@ public class NotificationDao {
                 .on(SURVEY_INSTANCE_RECIPIENT.SURVEY_INSTANCE_ID.eq(SURVEY_INSTANCE.ID))
                 .innerJoin(PERSON)
                 .on(PERSON.ID.eq(SURVEY_INSTANCE_RECIPIENT.PERSON_ID))
+                .innerJoin(SURVEY_RUN).on(SURVEY_INSTANCE.SURVEY_RUN_ID.eq(SURVEY_RUN.ID))
+                .innerJoin(SURVEY_TEMPLATE).on(SURVEY_RUN.SURVEY_TEMPLATE_ID.eq(SURVEY_TEMPLATE.ID))
                 .where(PERSON.EMAIL.eq(userId))
                 .and(SURVEY_INSTANCE.ORIGINAL_INSTANCE_ID.isNull())
                 .and(SURVEY_INSTANCE.STATUS.in(asList(
                         SurveyInstanceStatus.NOT_STARTED.name(),
-                        SurveyInstanceStatus.IN_PROGRESS.name())));
+                        SurveyInstanceStatus.IN_PROGRESS.name())))
+                .and(SURVEY_TEMPLATE.STATUS.eq(ReleaseLifecycleStatus.ACTIVE.name()));
 
 
         Select<Record2<String, Integer>> qry = attestationCount

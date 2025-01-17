@@ -22,7 +22,7 @@
     <parent>
         <artifactId>waltz</artifactId>
         <groupId>org.finos</groupId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.67-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -78,13 +78,12 @@
                 <version>${liquibase.maven.version}</version>
                 <configuration>
                     <changeLogFile>
-                        ${basedir}/../waltz-data/src/main/ddl/liquibase/db.changelog-master.xml
+                       src/main/resources/liquibase/db.changelog-master.xml
                     </changeLogFile>
                     <driver>${jdbc.driver}</driver>
                     <url>${database.url}</url>
                     <username>${database.user}</username>
                     <password>${database.password}</password>
-                    <logging>info</logging>
                     <promptOnNonLocalDatabase>false</promptOnNonLocalDatabase>
                     <!--
                         Enable the `exclude-ft` context if testing with linux mssql image as full text not yet supported
@@ -156,6 +155,26 @@
                         </target>
                     </generator>
                 </configuration>
+            </plugin>
+            <plugin>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.1.1</version>
+                <configuration>
+                    <appendAssemblyId>false</appendAssemblyId>
+                    <finalName>liquibase-scripts</finalName>
+                    <descriptors>
+                        <descriptor>assembly.xml</descriptor>
+                    </descriptors>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>create-archive</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

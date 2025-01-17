@@ -21,6 +21,10 @@ import _ from "lodash";
 import {initialiseData} from "../common";
 
 import template from "./physical-specification-view.html";
+import {CORE_API} from "../common/services/core-api-utils";
+import toasts from "../svelte-stores/toast-store";
+import {displayError} from "../common/error-utils";
+import {copyTextToClipboard} from "../common/browser-utils";
 
 
 const initialState = {
@@ -75,6 +79,8 @@ function loadFlowDiagrams(specId, $q, flowDiagramStore, flowDiagramEntityStore) 
 
 function controller($q,
                     $stateParams,
+                    $state,
+                    $window,
                     applicationStore,
                     flowDiagramStore,
                     flowDiagramEntityStore,
@@ -82,7 +88,8 @@ function controller($q,
                     logicalFlowStore,
                     orgUnitStore,
                     physicalSpecificationStore,
-                    physicalFlowStore)
+                    physicalFlowStore,
+                    serviceBroker)
 {
     const vm = initialiseData(this, initialState);
 
@@ -128,12 +135,54 @@ function controller($q,
             flowDiagramEntityStore)
             .then(r => Object.assign(vm, r));
     };
+
+
+    function reloadSpec() {
+        physicalSpecificationStore
+            .getById(specId)
+            .then(spec => vm.specification = spec);
+    }
+
+
+    function mkCommand(name, value) {
+        return {
+            entityReference: {id: vm.specification.id, kind: "PHYSICAL_SPECIFICATION"},
+            name,
+            value
+        };
+    }
+
+
+    const doSave = (name, value) => {
+        const cmd = mkCommand(name, value);
+        return serviceBroker
+            .execute(
+                CORE_API.PhysicalSpecificationStore.updateAttribute,
+                [ vm.specification.id, cmd ])
+            .then(r => {
+                toasts.success(`Updated ${name}`);
+                return reloadSpec();
+            })
+            .catch(e => displayError(`Could not update ${name} value`, e));
+    };
+
+    vm.onSaveFormat = (value, ctx) => doSave("format", value);
+    vm.onSaveDescription = (value, ctx) => doSave("description", value.newVal);
+
+    vm.sharePageLink = () => {
+        const viewUrl = $state.href("main.physical-specification.external-id", { externalId: vm.specification.externalId });
+        copyTextToClipboard(`${$window.location.origin}${viewUrl}`)
+            .then(() => toasts.success("Copied link to clipboard"))
+            .catch(e => displayError("Could not copy link to clipboard", e));
+    }
 }
 
 
 controller.$inject = [
     "$q",
     "$stateParams",
+    "$state",
+    "$window",
     "ApplicationStore",
     "FlowDiagramStore",
     "FlowDiagramEntityStore",
@@ -141,7 +190,8 @@ controller.$inject = [
     "LogicalFlowStore",
     "OrgUnitStore",
     "PhysicalSpecificationStore",
-    "PhysicalFlowStore"
+    "PhysicalFlowStore",
+    "ServiceBroker"
 ];
 
 

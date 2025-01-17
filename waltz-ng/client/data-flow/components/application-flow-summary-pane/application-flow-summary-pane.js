@@ -25,15 +25,14 @@ import {categorizeDirection} from "../../../logical-flow/logical-flow-utils";
 import {nest} from "d3-collection";
 
 import template from "./application-flow-summary-pane.html";
-import {tallyBy} from "../../../common/tally-utils";
-import {color} from "d3-color";
-import indexByKeyForType from "../../../enum-value/enum-value-utilities";
 import {entity} from "../../../common/services/enums/entity";
 import {loadFlowClassificationRatings} from "../../../flow-classification-rule/flow-classification-utils";
+import {flowDirection as FlowDirection} from "../../../common/services/enums/flow-direction";
 
 
 const bindings = {
-    parentEntityRef: "<"
+    parentEntityRef: "<",
+    ratingDirection: "<"
 };
 
 
@@ -64,21 +63,24 @@ function enrichDecorators(parentEntityRef, unknownDataTypeId, logicalFlows = [],
 }
 
 
-function calcStats(enrichedDecorators = []) {
+function calcStats(enrichedDecorators = [], ratingDirection = FlowDirection.OUTBOUND.key) {
+
     const byDirectionAndMappingStatus = nest()
         .key(d => d.direction)
         .key(d => d.mappingStatus)
         .object(enrichedDecorators);
 
+    const ratingMapper = d => ratingDirection === FlowDirection.OUTBOUND.key ? d.decorator.rating : d.decorator.targetInboundRating;
+
     const byDirectionAndAuthoritativeness = nest()
         .key(d => d.direction)
-        .key(d => d.decorator.rating)
+        .key(ratingMapper)
         .object(enrichedDecorators);
 
     const chartData = nest()
         .key(d => d.direction)
         .key(d => d.mappingStatus)
-        .key(d => d.decorator.rating)
+        .key(ratingMapper)
         .rollup(xs => xs.length)
         .object(enrichedDecorators);
 
@@ -89,32 +91,6 @@ function calcStats(enrichedDecorators = []) {
     };
 }
 
-function getFreshnessSummaryConfig() {
-    return {
-        colorProvider: (d) => color(d.color),
-        valueProvider: (d) => d.count,
-        idProvider: (d) => d.key,
-        labelProvider: d => d.title,
-        size: 40
-    };
-}
-
-function getFreshnessSummaryData(logicalFlows, physicalFlows, enumValues) {
-    const logicalFlowIds = logicalFlows
-        .map(lf => lf.id);
-
-    const producerOrConsumerPhysicalFlows = physicalFlows
-        .filter(pf => logicalFlowIds.includes(pf.logicalFlowId));
-
-    const summaryData = tallyBy(
-        producerOrConsumerPhysicalFlows,
-        "freshnessIndicator");
-
-    _.each(summaryData, d => d.color = _.get(enumValues, [d.key, "data", "iconColor"], "none"));
-    _.each(summaryData, d => d.title = _.get(enumValues, [d.key, "data", "name"], ""));
-
-    return summaryData;
-}
 
 function controller($q, serviceBroker) {
     const vm = initialiseData(this, initialState);
@@ -145,44 +121,22 @@ function controller($q, serviceBroker) {
                     logicalFlows,
                     decorators);
 
-                vm.stats = calcStats(vm.enrichedDecorators);
-            });
-
-        const physicalFlowPromise = serviceBroker
-            .loadViewData(
-                CORE_API.PhysicalFlowStore.findByEntityReference,
-                [vm.parentEntityRef])
-            .then(r => r.data);
-
-        const enumValuePromise = serviceBroker
-            .loadAppData(CORE_API.EnumValueStore.findAll)
-            .then(r => vm.summaryConfig =
-                indexByKeyForType(r.data, "FreshnessIndicator"));
-
-        $q.all([logicalFlowPromise, physicalFlowPromise, enumValuePromise])
-            .then(([logicalFlows, physicalFlows]) => {
-                vm.freshnessSummaryData = getFreshnessSummaryData(
-                    logicalFlows,
-                    physicalFlows,
-                    vm.summaryConfig);
-
-                vm.freshnessSummaryConfig = getFreshnessSummaryConfig();
+                vm.stats = calcStats(vm.enrichedDecorators, vm.ratingDirection);
             });
     };
 
-    const loadUnknownDataType = () => {
+    const loadUnknownDataTypeId = () => {
         return serviceBroker
             .loadAppData(CORE_API.DataTypeStore.findAll)
             .then(r => findUnknownDataTypeId(r.data));
     };
 
-
-    vm.$onInit = () => {
-        loadUnknownDataType()
-            .then(unknownDataType => reload(unknownDataType.id));
+    vm.$onChanges = () => {
+        loadUnknownDataTypeId()
+            .then(dtId => reload(dtId));
 
         loadFlowClassificationRatings(serviceBroker)
-            .then(xs => vm.flowClassificationCols = xs);
+            .then(xs => vm.flowClassificationCols = _.filter(xs, d => d.direction === vm.ratingDirection));
     }
 }
 

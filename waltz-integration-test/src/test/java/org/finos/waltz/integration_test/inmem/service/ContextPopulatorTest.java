@@ -3,7 +3,6 @@ package org.finos.waltz.integration_test.inmem.service;
 import org.finos.waltz.common.SetUtilities;
 import org.finos.waltz.data.ImmutableGenericSelector;
 import org.finos.waltz.integration_test.inmem.BaseInMemoryIntegrationTest;
-import org.finos.waltz.integration_test.inmem.helpers.AppHelper;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.EntityReference;
 import org.finos.waltz.schema.tables.AssessmentDefinition;
@@ -15,9 +14,10 @@ import org.finos.waltz.schema.tables.records.AssessmentRatingRecord;
 import org.finos.waltz.schema.tables.records.RatingSchemeItemRecord;
 import org.finos.waltz.schema.tables.records.RatingSchemeRecord;
 import org.finos.waltz.service.workflow.*;
+import org.finos.waltz.test_common.helpers.AppHelper;
 import org.jooq.DSLContext;
 import org.jooq.impl.DSL;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Optional;
@@ -26,10 +26,11 @@ import java.util.function.Predicate;
 
 import static java.lang.String.format;
 import static org.finos.waltz.common.CollectionUtilities.find;
-import static org.finos.waltz.integration_test.inmem.helpers.NameHelper.mkName;
 import static org.finos.waltz.schema.tables.Application.APPLICATION;
-import static org.finos.waltz.service.workflow.ContextVariableReference.mkVarRef;
-import static org.junit.Assert.assertTrue;
+import static org.finos.waltz.service.workflow.ContextVariableDeclaration.mkDecl;
+import static org.finos.waltz.test_common.helpers.NameHelper.mkName;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 
 public class ContextPopulatorTest extends BaseInMemoryIntegrationTest {
 
@@ -77,21 +78,9 @@ public class ContextPopulatorTest extends BaseInMemoryIntegrationTest {
         mkRating(a1, def2, ratingItem2);
 
         Set<ContextVariableDeclaration> declarations = SetUtilities.asSet(
-                ImmutableContextVariableDeclaration
-                        .builder()
-                        .name("def1Var")
-                        .ref(mkVarRef(EntityKind.ASSESSMENT_DEFINITION, def1.getExternalId()))
-                        .build(),
-                ImmutableContextVariableDeclaration
-                        .builder()
-                        .name("def1VarDupe")
-                        .ref(mkVarRef(EntityKind.ASSESSMENT_DEFINITION, def1.getExternalId()))
-                        .build(),
-                ImmutableContextVariableDeclaration
-                        .builder()
-                        .name("def2Var")
-                        .ref(mkVarRef(EntityKind.ASSESSMENT_DEFINITION, def2.getExternalId()))
-                        .build());
+                mkDecl("def1Var", EntityKind.ASSESSMENT_DEFINITION, def1.getExternalId()),
+                mkDecl("def1VarDupe", EntityKind.ASSESSMENT_DEFINITION, def1.getExternalId()),
+                mkDecl("def2Var", EntityKind.ASSESSMENT_DEFINITION, def2.getExternalId()));
 
         Set<ContextVariable<? extends ContextValue>> vars = populator.populateContext(declarations, selector);
 
@@ -161,11 +150,10 @@ public class ContextPopulatorTest extends BaseInMemoryIntegrationTest {
                            String refDesc) {
         Optional<ContextVariable<? extends ContextValue>> maybeVar = find(vars, v -> v.entityRef().equals(appRef) && v.name().equals(varName));
         assertTrue(
-                format("Could not find var with name: %s for app: %s", varName, refDesc),
                 maybeVar.isPresent());
-        maybeVar.ifPresent(v -> assertTrue(
-                format("Var: %s should be: %s for app: %s", varName, valueChecker, refDesc),
-                valueChecker.test(v.value())));
+        maybeVar.ifPresent(v ->
+                assertTrue(valueChecker.test(v.value()),
+                        format("Could not find var with name: %s for app: %s", varName, refDesc)));
     }
 
 }

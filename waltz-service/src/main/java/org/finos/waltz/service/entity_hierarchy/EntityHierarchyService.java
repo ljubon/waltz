@@ -18,8 +18,6 @@
 
 package org.finos.waltz.service.entity_hierarchy;
 
-import org.finos.waltz.schema.Tables;
-import org.finos.waltz.service.person_hierarchy.PersonHierarchyService;
 import org.finos.waltz.common.ListUtilities;
 import org.finos.waltz.common.hierarchy.FlatNode;
 import org.finos.waltz.common.hierarchy.Forest;
@@ -32,26 +30,40 @@ import org.finos.waltz.data.entity_hierarchy.EntityRootsSelectorFactory;
 import org.finos.waltz.data.entity_statistic.EntityStatisticDao;
 import org.finos.waltz.data.measurable.MeasurableDao;
 import org.finos.waltz.data.orgunit.OrganisationalUnitDao;
+import org.finos.waltz.data.person.PersonDao;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.EntityReference;
+import org.finos.waltz.model.entity_hierarchy.EntityHierarchy;
 import org.finos.waltz.model.entity_hierarchy.EntityHierarchyItem;
+import org.finos.waltz.model.entity_hierarchy.ImmutableEntityHierarchy;
 import org.finos.waltz.model.entity_hierarchy.ImmutableEntityHierarchyItem;
 import org.finos.waltz.model.tally.ImmutableTally;
 import org.finos.waltz.model.tally.Tally;
-import org.jooq.*;
+import org.finos.waltz.schema.Tables;
+import org.finos.waltz.service.person_hierarchy.PersonHierarchyService;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Record1;
+import org.jooq.Select;
+import org.jooq.Table;
 import org.jooq.impl.DSL;
+import org.jooq.lambda.tuple.Tuple2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.finos.waltz.schema.Tables.ENTITY_HIERARCHY;
-import static org.finos.waltz.schema.Tables.MEASURABLE;
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.model.EntityKind.PERSON;
+import static org.finos.waltz.schema.Tables.ENTITY_HIERARCHY;
+import static org.finos.waltz.schema.Tables.MEASURABLE;
 import static org.jooq.impl.DSL.select;
 
 @Service
@@ -66,6 +78,7 @@ public class EntityHierarchyService {
     private final MeasurableDao measurableDao;
     private final OrganisationalUnitDao organisationalUnitDao;
     private final PersonHierarchyService personHierarchyService;
+    private final PersonDao personDao;
 
     @Autowired
     public EntityHierarchyService(DSLContext dsl,
@@ -73,9 +86,10 @@ public class EntityHierarchyService {
                                   DataTypeDao dataTypeDao,
                                   EntityHierarchyDao entityHierarchyDao,
                                   EntityStatisticDao entityStatisticDao,
-                                  MeasurableDao measurableDao, 
+                                  MeasurableDao measurableDao,
                                   OrganisationalUnitDao organisationalUnitDao,
-                                  PersonHierarchyService personHierarchyService) {
+                                  PersonHierarchyService personHierarchyService,
+                                  PersonDao personDao) {
 
         checkNotNull(dsl, "dsl cannot be null");
         checkNotNull(changeInitiativeDao, "changeInitiativeDao cannot be null");
@@ -85,6 +99,7 @@ public class EntityHierarchyService {
         checkNotNull(measurableDao, "measurableDao cannot be null");
         checkNotNull(organisationalUnitDao, "organisationalUnitDao cannot be null");
         checkNotNull(personHierarchyService, "personHierarchyService cannot be null");
+        checkNotNull(personDao, "personDao cannot be null");
 
         this.dsl = dsl;
         this.changeInitiativeDao = changeInitiativeDao;
@@ -94,6 +109,7 @@ public class EntityHierarchyService {
         this.measurableDao = measurableDao;
         this.organisationalUnitDao = organisationalUnitDao;
         this.personHierarchyService = personHierarchyService;
+        this.personDao = personDao;
     }
 
 
@@ -132,7 +148,7 @@ public class EntityHierarchyService {
             case ORG_UNIT:
                 return organisationalUnitDao.findByIdSelectorAsEntityReference(selector);
             case PERSON:
-                return Collections.emptyList();
+                return personDao.findByPersonIdSelectorAsEntityReference(selector);
             default:
                 throw new IllegalArgumentException("Cannot create selector for entity kind: " + kind);
         }
@@ -144,7 +160,7 @@ public class EntityHierarchyService {
             int[] rc = personHierarchyService.build();
             return rc.length;
         } else {
-            Table table = determineTableToRebuild(kind);
+            Table<?> table = determineTableToRebuild(kind);
             return buildFor(table, kind, DSL.trueCondition(), DSL.trueCondition());
         }
     }
@@ -160,7 +176,7 @@ public class EntityHierarchyService {
     }
 
 
-    private int buildFor(Table table,
+    private int buildFor(Table<?> table,
                          EntityKind kind,
                          Condition selectFilter,
                          Condition deleteFilter) {
@@ -171,14 +187,16 @@ public class EntityHierarchyService {
     }
 
 
-    private List<FlatNode<Long, Long>> fetchFlatNodes(Table table, Condition selectFilter) {
+    private List<FlatNode<Long, Long>> fetchFlatNodes(Table<?> table,
+                                                      Condition selectFilter) {
         Field<Long> idField = table.field("id", Long.class);
         Field<Long> parentIdField = table.field("parent_id", Long.class);
 
         checkNotNull(idField, "cannot find id column");
         checkNotNull(parentIdField, "cannot find parent_id column");
 
-        return dsl.select(idField, parentIdField)
+        return dsl
+                .select(idField, parentIdField)
                 .from(table)
                 .where(selectFilter)
                 .fetch(r -> new FlatNode<>(
@@ -188,9 +206,9 @@ public class EntityHierarchyService {
     }
 
 
-    private List<EntityHierarchyItem> convertFlatNodesToHierarchyItems(EntityKind kind, Collection<FlatNode<Long, Long>> flatNodes) {
+    private List<EntityHierarchyItem> convertFlatNodesToHierarchyItems(EntityKind kind,
+                                                                       Collection<FlatNode<Long, Long>> flatNodes) {
         Forest<Long, Long> forest = HierarchyUtilities.toForest(flatNodes);
-        Node<Long, Long> r = forest.getAllNodes().get(811L);
         Map<Long, Integer> idToLevel = HierarchyUtilities.assignDepths(forest);
 
         return forest.getAllNodes()
@@ -201,39 +219,48 @@ public class EntityHierarchyService {
     }
 
 
-    private Function<Node<Long, Long>, Stream<? extends EntityHierarchyItem>> streamItemsForNode(EntityKind kind, Map<Long, Integer> idToLevel) {
-        return node -> Stream.concat(
-                streamAncestors(kind, idToLevel, node),
-                streamSelf(kind, idToLevel, node));
+    private Function<Node<Long, Long>, Stream<? extends EntityHierarchyItem>> streamItemsForNode(EntityKind kind,
+                                                                                                 Map<Long, Integer> idToLevel) {
+        return node -> Stream
+                .concat(
+                    streamAncestors(kind, idToLevel, node),
+                    streamSelf(kind, idToLevel, node));
     }
 
 
-    private Stream<EntityHierarchyItem> streamSelf(EntityKind kind, Map<Long, Integer> idToLevel, Node<Long, Long> node) {
+    private Stream<EntityHierarchyItem> streamSelf(EntityKind kind,
+                                                   Map<Long, Integer> idToLevel,
+                                                   Node<Long, Long> node) {
         Long nodeId = node.getId();
         Integer level = idToLevel.get(nodeId);
         ImmutableEntityHierarchyItem selfAsEntityHierarchyItem = ImmutableEntityHierarchyItem.builder()
                 .id(nodeId)
                 .parentId(nodeId)
-                .level(level == null ? -1 : level)
+                .ancestorLevel(level == null ? -1 : level)
+                .descendantLevel(idToLevel.getOrDefault(node.getId(), -1))
                 .kind(kind)
                 .build();
         return Stream.of(selfAsEntityHierarchyItem);
     }
 
 
-    private Stream<EntityHierarchyItem> streamAncestors(EntityKind kind, Map<Long, Integer> idToLevel, Node<Long, Long> node) {
-        return HierarchyUtilities.parents(node)
+    private Stream<EntityHierarchyItem> streamAncestors(EntityKind kind,
+                                                        Map<Long, Integer> idToLevel,
+                                                        Node<Long, Long> node) {
+        return HierarchyUtilities
+            .parents(node)
             .stream()
             .map(p -> ImmutableEntityHierarchyItem.builder()
                     .id(node.getId())
                     .parentId(p.getId())
-                    .level(idToLevel.get(p.getId()))
+                    .ancestorLevel(idToLevel.get(p.getId()))
+                    .descendantLevel(idToLevel.getOrDefault(node.getId(), -1))
                     .kind(kind)
                     .build());
     }
 
 
-    private Table determineTableToRebuild(EntityKind kind) {
+    private Table<?> determineTableToRebuild(EntityKind kind) {
         switch (kind) {
             case CHANGE_INITIATIVE:
                 return Tables.CHANGE_INITIATIVE;
@@ -248,6 +275,13 @@ public class EntityHierarchyService {
             default:
                 throw new IllegalArgumentException("Cannot determine hierarchy table for kind: "+kind);
         }
+    }
+
+    public EntityHierarchy fetchHierarchyForKind(EntityKind kind) {
+        return ImmutableEntityHierarchy
+                .builder()
+                .hierarchyItems(entityHierarchyDao.fetchHierarchyForKind(kind))
+                .build();
     }
 
 }

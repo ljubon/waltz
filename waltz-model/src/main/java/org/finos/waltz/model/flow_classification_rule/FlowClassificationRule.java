@@ -35,10 +35,16 @@ public abstract class FlowClassificationRule implements
         LastUpdatedProvider,
         EntityKindProvider {
 
-    public abstract EntityReference applicationReference();
-    public abstract EntityReference appOrgUnitReference();
-    public abstract EntityReference parentReference();
+    public abstract EntityReference subjectReference();
+
+    @Nullable
+    public abstract EntityReference subjectOrgUnitReference();
+
+    public abstract EntityReference vantagePointReference();
+
+    @Nullable
     public abstract Long dataTypeId();
+
     public abstract Long classificationId();
 
     @Value.Default
@@ -54,6 +60,14 @@ public abstract class FlowClassificationRule implements
     @Value.Default
     public boolean isReadonly() {
         return false;
+    }
+
+    @Nullable
+    public abstract String message();
+
+    @Value.Default
+    public MessageSeverity messageSeverity() {
+        return MessageSeverity.INFORMATION;
     }
 
 

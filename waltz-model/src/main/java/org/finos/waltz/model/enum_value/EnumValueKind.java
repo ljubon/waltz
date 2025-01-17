@@ -27,7 +27,8 @@ public enum EnumValueKind {
     SCENARIO_TYPE("ScenarioType"),
     CHANGE_INITIATIVE_LIFECYCLE_PHASE("changeInitiativeLifecyclePhase"),
     PHYSICAL_FLOW_CRITICALITY("physicalFlowCriticality"),
-    FRESHNESS_INDICATOR("FreshnessIndicator");
+    DATA_FORMAT_KIND("DataFormatKind"),
+    FREQUENCY("Frequency");
 
     private final String dbValue;
 

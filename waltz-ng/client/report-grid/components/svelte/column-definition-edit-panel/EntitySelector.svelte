@@ -4,21 +4,50 @@
     import _ from "lodash";
     import Icon from "../../../../common/svelte/Icon.svelte";
     import EntityPicker from "../pickers/EntityPicker.svelte";
+    import {mkReportGridFixedColumnRef} from "../report-grid-utils";
 
     export let onSelect = (d) => console.log("Selecting entity", d);
     export let onDeselect = (d) => console.log("Deselecting entity", d);
     export let selectionFilter = () => true;
+    export let subjectKind;
 
     let selectedEntityKind = null;
     let showDropdown = false;
 
-    const entityKinds = _.orderBy([
-        entity["INVOLVEMENT_KIND"],
-        entity["COST_KIND"],
-        entity["SURVEY_QUESTION"],
-        entity["ASSESSMENT_DEFINITION"],
-        entity["MEASURABLE"],
-    ], d => d.name);
+    let baseKinds = [
+        entity.INVOLVEMENT_KIND,
+        entity.SURVEY_QUESTION,
+        entity.ASSESSMENT_DEFINITION,
+        entity.APP_GROUP,
+        entity.SURVEY_INSTANCE,
+        entity.ORG_UNIT,
+        entity.ENTITY_STATISTIC
+    ];
+
+    $: entityKinds = entityKindsBySubjectKind[subjectKind] || baseKinds;
+
+    const entityKindsBySubjectKind = {
+        "APPLICATION": _.orderBy(
+            _.concat(
+                baseKinds,
+                [
+                    entity.ATTESTATION,
+                    entity.APPLICATION,
+                    entity.DATA_TYPE,
+                    entity.MEASURABLE,
+                    entity.COST_KIND,
+                    entity.ENTITY_ALIAS,
+                    entity.TAG,
+                    entity.COMPLEXITY_KIND,
+                    entity.MEASURABLE_CATEGORY,
+                ]),
+            d => d.name),
+        "CHANGE_INITIATIVE": _.orderBy(
+            _.concat(
+                baseKinds,
+                [entity.CHANGE_INITIATIVE]),
+            d => d.name)
+    };
 
     function toggleDropdown() {
         showDropdown = !showDropdown
@@ -33,6 +62,40 @@
         selectedEntityKind = null;
         showDropdown = false
     }
+
+    $: subjectKindFilter = (kind) => {
+        return subjectKind === kind;
+    };
+
+
+    $: entitySelectionFilter = (d) => {
+        if (d.kind === "ENTITY_FIELD_REFERENCE" || d.kind === "REPORT_GRID_FIXED_COLUMN_DEFINITION") {
+            return selectionFilter(d);
+        } else {
+            const colRef = mkReportGridFixedColumnRef(d);
+            return selectionFilter(colRef);
+        }
+    };
+
+
+    $: selectEntity = (d) => {
+        if (d.kind === "ENTITY_FIELD_REFERENCE" || d.kind === "REPORT_GRID_FIXED_COLUMN_DEFINITION") {
+            return onSelect(d);
+        } else {
+            const colRef = mkReportGridFixedColumnRef(d);
+            return onSelect(colRef);
+        }
+    };
+
+
+    $: deselectEntity = (d) => {
+        if (d.kind === "ENTITY_FIELD_REFERENCE" || d.kind === "REPORT_GRID_FIXED_COLUMN_DEFINITION") {
+            return onDeselect(d);
+        } else {
+            const colRef = mkReportGridFixedColumnRef(d);
+            return onDeselect(colRef);
+        }
+    };
 
 </script>
 
@@ -67,10 +130,10 @@
                     <ul>
                         {#if selectedEntityKind}
                             <li>
-                                <div class="text-muted clickable"
-                                     on:click={() => selectEntityKind(null)}>
+                                <button class="btn-skinny text-muted"
+                                        on:click={() => selectEntityKind(null)}>
                                     Select an entity kind
-                                </div>
+                                </button>
                             </li>
                         {/if}
                         {#each entityKinds as entityKind}
@@ -91,9 +154,10 @@
 <div class="row">
     <div class="col-sm-12">
         {#if selectedEntityKind}
-            <EntityPicker {onSelect}
-                          {onDeselect}
-                          {selectionFilter}
+            <EntityPicker onSelect={selectEntity}
+                          onDeselect={deselectEntity}
+                          selectionFilter={entitySelectionFilter}
+                          {subjectKindFilter}
                           entityKind={selectedEntityKind?.key}/>
         {:else}
             <div class="help-block small">
@@ -124,12 +188,6 @@
         &:hover {
             background: #f3f9ff;
          }
-
-        div {
-            width: 100%;
-            padding: 0.5em;
-            text-align: left;
-        }
     }
 
     button {

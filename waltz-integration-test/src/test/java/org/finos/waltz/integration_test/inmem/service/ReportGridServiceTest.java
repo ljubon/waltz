@@ -3,15 +3,16 @@ package org.finos.waltz.integration_test.inmem.service;
 import org.finos.waltz.common.exception.InsufficientPrivelegeException;
 import org.finos.waltz.common.exception.NotFoundException;
 import org.finos.waltz.integration_test.inmem.BaseInMemoryIntegrationTest;
-import org.finos.waltz.integration_test.inmem.helpers.InvolvementHelper;
 import org.finos.waltz.model.EntityKind;
-import org.finos.waltz.model.EntityReference;
+import org.finos.waltz.model.person.Person;
 import org.finos.waltz.model.report_grid.*;
 import org.finos.waltz.service.report_grid.ReportGridMemberService;
 import org.finos.waltz.service.report_grid.ReportGridService;
+import org.finos.waltz.test_common.helpers.InvolvementHelper;
+import org.finos.waltz.test_common.helpers.PersonHelper;
 import org.jooq.DSLContext;
 import org.jooq.Record1;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -21,16 +22,16 @@ import java.util.Set;
 import static org.finos.waltz.common.CollectionUtilities.find;
 import static org.finos.waltz.common.CollectionUtilities.maybeFirst;
 import static org.finos.waltz.common.SetUtilities.asSet;
-import static org.finos.waltz.integration_test.inmem.helpers.NameHelper.mkName;
 import static org.finos.waltz.schema.Tables.REPORT_GRID_COLUMN_DEFINITION;
-import static org.junit.Assert.*;
+import static org.finos.waltz.test_common.helpers.NameHelper.mkName;
+import static org.junit.jupiter.api.Assertions.*;
+
 
 @Service
 public class ReportGridServiceTest extends BaseInMemoryIntegrationTest {
 
     @Autowired
     private DSLContext dsl;
-
 
     @Autowired
     private ReportGridService reportGridService;
@@ -41,28 +42,31 @@ public class ReportGridServiceTest extends BaseInMemoryIntegrationTest {
     @Autowired
     private InvolvementHelper involvementHelper;
 
+    @Autowired
+    private PersonHelper personHelper;
+
 
     @Test
     public void canCreateAReportGrid() throws InsufficientPrivelegeException {
         ReportGridDefinition def = mkGrid();
-        assertNotNull("expected a report grid definition is not null", def);
-        assertTrue("id should be set (positive integer)", def.id().get() > 0);
+        assertNotNull(def, "expected a report grid definition is not null");
+        assertTrue(def.id().get() > 0, "id should be set (positive integer)");
     }
 
 
     @Test
     public void canGetColumnDefinitionsForGrid() throws InsufficientPrivelegeException {
         ReportGridDefinition def = mkGrid();
-        assertEquals(1, def.columnDefinitions().size());
+        assertEquals(1, def.fixedColumnDefinitions().size());
     }
 
 
     @Test
     public void cannotRemoveANonExistentReportGrid() throws InsufficientPrivelegeException {
         assertThrows(
-                "Cannot remove a non existent report grid",
                 NotFoundException.class,
-                () -> reportGridService.remove(-1, mkName("admin")));
+                () -> reportGridService.remove(-1, mkName("admin")),
+                "Cannot remove a non existent report grid");
     }
 
 
@@ -70,9 +74,9 @@ public class ReportGridServiceTest extends BaseInMemoryIntegrationTest {
     public void cannotRemoveReportGridYouDoNotOwn() throws InsufficientPrivelegeException {
         ReportGridDefinition grid = mkGrid();
         assertThrows(
-                "Cannot remove a report grid the user does not own",
                 InsufficientPrivelegeException.class,
-                () -> reportGridService.remove(grid.id().get(), mkName("someone_else")));
+                () -> reportGridService.remove(grid.id().get(), mkName("someone_else")),
+                "Cannot remove a report grid the user does not own");
     }
 
 
@@ -83,18 +87,20 @@ public class ReportGridServiceTest extends BaseInMemoryIntegrationTest {
         Optional<ReportGridMember> maybeOwner = maybeFirst(
                 members,
                 m -> m.role() == ReportGridMemberRole.OWNER);
-        String ownerId = maybeOwner
-                .map(ReportGridMember::userId)
+        Person owner = maybeOwner
+                .map(ReportGridMember::user)
                 .orElseThrow(() -> new AssertionError("Should have an owner for a newly created grid"));
 
-        assertTrue("grid should have been removed", reportGridService.remove(grid.id().get(), ownerId));
-        assertTrue("members should have been removed", reportGridMemberService.findByGridId(grid.id().get()).isEmpty());
-        assertFalse("cannot find grid after it's been removed", find(reportGridService.findAll(), g -> g.id().equals(grid.id())).isPresent());  //check it's really gone
+        assertTrue(reportGridService.remove(grid.id().get(), owner.userId()),"grid should have been removed");
+        assertTrue(reportGridMemberService.findByGridId(grid.id().get()).isEmpty(),"members should have been removed");
+        assertFalse(find(reportGridService.findAllDefinitions(),
+                g -> g.id().equals(grid.id())).isPresent(),
+                "cannot find grid after it's been removed");  //check it's really gone
 
         assertThrows(
-                "Cannot remove a report grid we have already removed",
                 NotFoundException.class,
-                () -> reportGridService.remove(grid.id().get(), ownerId));
+                () -> reportGridService.remove(grid.id().get(), owner.userId()),
+                "Cannot remove a report grid we have already removed");
 
         Record1<Integer> count = dsl
                 .selectCount()
@@ -103,7 +109,6 @@ public class ReportGridServiceTest extends BaseInMemoryIntegrationTest {
                 .fetchOne();
 
         assertEquals(Integer.valueOf(0), count.value1());
-
     }
 
 
@@ -112,28 +117,32 @@ public class ReportGridServiceTest extends BaseInMemoryIntegrationTest {
     private ReportGridDefinition mkGrid() throws InsufficientPrivelegeException {
         ReportGridCreateCommand cmd = ImmutableReportGridCreateCommand.builder()
                 .name(mkName("testReport"))
-                .externalId(mkName("extId"))
+                .subjectKind(EntityKind.APPLICATION)
                 .build();
 
         String admin = mkName("admin");
-        ReportGridDefinition def = reportGridService.create(cmd, admin);
+
+        personHelper.createPerson(admin);
+
+        ReportGridInfo def = reportGridService.create(cmd, admin);
 
         long invKind = involvementHelper.mkInvolvementKind(mkName("dummyInv"));
 
-        ReportGridColumnDefinition colDef = ImmutableReportGridColumnDefinition
+        ReportGridFixedColumnDefinition colDef = ImmutableReportGridFixedColumnDefinition
                 .builder()
-                .columnEntityReference(EntityReference.mkRef(EntityKind.INVOLVEMENT_KIND, invKind))
+                .columnEntityKind(EntityKind.INVOLVEMENT_KIND)
+                .columnEntityId(invKind)
                 .position(10)
                 .build();
 
         ReportGridColumnDefinitionsUpdateCommand colCmd = ImmutableReportGridColumnDefinitionsUpdateCommand
                 .builder()
-                .columnDefinitions(asSet(colDef))
+                .fixedColumnDefinitions(asSet(colDef))
                 .build();
 
 
         return reportGridService.updateColumnDefinitions(
-                def.id().get(),
+                def.gridId(),
                 colCmd,
                 admin);
     }

@@ -23,7 +23,12 @@ import org.finos.waltz.schema.tables.OrganisationalUnit;
 import org.finos.waltz.model.EntityReference;
 import org.finos.waltz.model.survey.SurveyQuestion;
 import org.finos.waltz.model.survey.SurveyQuestionResponse;
-import org.jooq.*;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Record1;
+import org.jooq.SelectConditionStep;
+import org.jooq.Table;
 import org.jooq.impl.DSL;
 
 import java.util.List;
@@ -113,6 +118,21 @@ public class QuestionEntityPredicateNamespace extends QuestionBasePredicateNames
 
         return dsl
                 .fetchExists(qry);
+    }
+
+
+    protected boolean hasLifecyclePhase(String name,
+                                        Table<?> subjectTable,
+                                        Field<Long> subjectId,
+                                        Field<String> subjectLifecyclePhase) {
+
+
+        return dsl
+                .fetchExists(DSL
+                        .select()
+                        .from(subjectTable)
+                        .where(subjectLifecyclePhase.eq(name)
+                                .and(subjectId.eq(subjectRef.id()))));
     }
 
 }

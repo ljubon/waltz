@@ -19,6 +19,7 @@ import angular from "angular";
 import {registerComponents, registerStores} from "../common/module-utils";
 
 import SurveyInstanceStore from "./services/survey-instance-store";
+import SurveyInstanceViewStore from "./services/survey-instance-view-store";
 import SurveyRunStore from "./services/survey-run-store";
 import SurveyTemplateStore from "./services/survey-template-store";
 
@@ -40,6 +41,9 @@ import SurveyTemplateOverview from "./components/survey-template-overview";
 import SurveyTemplateQuestionOverviewTable
     from "./components/question-overview-table/survey-template-question-overview-table";
 import SurveyQuestionStore from "./services/survey-question-store";
+import StringListInput from "./components/string-list-input/string-list-input";
+import SurveyTemplateImport from "./survey-template-import";
+
 
 export default () => {
     const module = angular.module("waltz.survey", []);
@@ -50,7 +54,8 @@ export default () => {
     registerComponents(module, [
         surveySection,
         measurableMultiSelect,
-        surveyQuestionMeasurableRenderer
+        surveyQuestionMeasurableRenderer,
+        StringListInput
     ]);
 
     module
@@ -64,6 +69,7 @@ export default () => {
 
     registerStores(module, [
         SurveyInstanceStore,
+        SurveyInstanceViewStore,
         SurveyQuestionStore,
         SurveyRunStore,
         SurveyTemplateStore
@@ -74,7 +80,8 @@ export default () => {
         SurveyInstanceSummary,
         SurveyTemplateQuestionOverviewTable,
         SurveyResponseAnswer,
-        SurveyResponseInput
+        SurveyResponseInput,
+        SurveyTemplateImport
     ]);
 
     return module.name;

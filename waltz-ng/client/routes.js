@@ -20,6 +20,9 @@ import {CORE_API} from "./common/services/core-api-utils";
 import WelcomeJs from "./welcome/welcome.js";
 import {activeSections} from "./dynamic-section/section-store";
 import toasts from "./svelte-stores/toast-store";
+import popover from "./svelte-stores/popover-store";
+import pageInfo from "./svelte-stores/page-navigation-store";
+
 
 function warmUpCache($q, serviceBroker) {
     return $q
@@ -78,6 +81,8 @@ function configureScrollToTopOnChange($doc, $transitions) {
     $transitions.onSuccess({}, () => {
         $doc[0].body.scrollTop = 0;
         $doc[0].documentElement.scrollTop = 0;
+        // remove any popovers, as unlikely they would still be wanted after a page transition
+        popover.dismiss();
     });
 }
 
@@ -221,8 +226,37 @@ configureInactivityTimer.$inject = [
 ];
 
 
-
 // -- SETUP ---
+
+function configureSvelteStoreListener($transitions, $state, $scope) {
+
+    $transitions.onSuccess({}, (x, y, z) => {
+        const target = x.targetState();
+
+        pageInfo.set({
+            state: target.state().name,
+            params: target.params(),
+            options: target.options(),
+            isNotification: true
+        });
+
+    });
+
+
+    pageInfo.subscribe((nextPg) => {
+        $scope.$applyAsync(() => {
+            if (!nextPg?.isNotification) {
+                $state.go(nextPg?.state, nextPg?.params, nextPg?.options);
+            }
+        })
+    });
+}
+
+configureSvelteStoreListener.$inject = [
+    "$transitions",
+    "$state",
+    "$rootScope"
+]
 
 function setup(module) {
     module
@@ -231,7 +265,8 @@ function setup(module) {
         .run(configureBetaNagMessageNotification)
         .run(configureStateChangeListener)
         .run(configureInactivityTimer)
-        .run(configureRouteDebugging);
+        .run(configureRouteDebugging)
+        .run(configureSvelteStoreListener);
 
 }
 

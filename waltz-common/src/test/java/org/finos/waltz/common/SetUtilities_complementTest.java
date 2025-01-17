@@ -18,26 +18,31 @@
 
 package org.finos.waltz.common;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.Set;
 
-import static org.finos.waltz.common.SetUtilities.*;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.finos.waltz.common.SetUtilities.asSet;
+import static org.finos.waltz.common.SetUtilities.complement;
+import static org.finos.waltz.common.SetUtilities.union;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SetUtilities_complementTest {
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void twoNullSets() {
-        complement(null,null);
+        assertThrows(IllegalArgumentException.class,
+                () -> complement(null, null));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void oneNullSet() {
         Set<String> abcSet = asSet("a", "b", "c");
-        complement(abcSet,null);
+        assertThrows(IllegalArgumentException.class,
+                () -> complement(abcSet, null));
     }
 
     @Test
@@ -76,8 +81,6 @@ public class SetUtilities_complementTest {
         Set<String> result = complement(abcSet,bcdSet);
 
         assertEquals(asSet("a","d"),result);
-
-
     }
 
     @Test

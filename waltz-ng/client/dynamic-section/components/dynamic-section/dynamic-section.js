@@ -20,6 +20,9 @@ import template from "./dynamic-section.html";
 import {initialiseData} from "../../../common/index";
 import {kindToViewState} from "../../../common/link-utils";
 import {CORE_API} from "../../../common/services/core-api-utils";
+import toasts from "../../../svelte-stores/toast-store";
+
+import _ from "lodash";
 
 
 const bindings = {
@@ -44,10 +47,10 @@ function controller($state, serviceBroker) {
 
 
     vm.$onChanges = () => {
-        if (vm.parentEntityRef !== null) {
+        if (!_.isNil(vm.parentEntityRef)) {
             vm.backLink = {
                 state: kindToViewState(vm.parentEntityRef.kind),
-                params: { id: vm.parentEntityRef.id },
+                params: {id: vm.parentEntityRef.id},
             };
             serviceBroker
                 .loadAppData(CORE_API.StaticPanelStore.findAll)
@@ -61,6 +64,14 @@ function controller($state, serviceBroker) {
                     }
                 });
         }
+    };
+
+    vm.onShare = () => {
+        const url = new URL(window.location);
+        url.searchParams.set("sections", vm.section.id);
+
+        navigator.clipboard.writeText(url.toString())
+            .then(() => toasts.success("Copied shareable url to clipboard"));
     };
 
 }

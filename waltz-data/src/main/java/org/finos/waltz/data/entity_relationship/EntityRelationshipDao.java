@@ -18,15 +18,31 @@
 
 package org.finos.waltz.data.entity_relationship;
 
-import org.finos.waltz.schema.tables.records.EntityRelationshipRecord;
 import org.finos.waltz.common.DateTimeUtilities;
 import org.finos.waltz.data.GenericSelector;
 import org.finos.waltz.data.InlineSelectFieldFactory;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.EntityReference;
-import org.finos.waltz.model.entity_relationship.*;
-import org.jooq.*;
+import org.finos.waltz.model.ImmutableEntityReference;
+import org.finos.waltz.model.entity_relationship.EntityRelationship;
+import org.finos.waltz.model.entity_relationship.EntityRelationshipKey;
+import org.finos.waltz.model.entity_relationship.ImmutableEntityRelationship;
+import org.finos.waltz.model.entity_relationship.RelationshipKind;
+import org.finos.waltz.model.entity_relationship.UpdateEntityRelationshipParams;
+import org.finos.waltz.schema.Tables;
+import org.finos.waltz.schema.tables.records.EntityRelationshipRecord;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Query;
+import org.jooq.Record;
+import org.jooq.Record3;
+import org.jooq.RecordMapper;
+import org.jooq.SelectConditionStep;
+import org.jooq.SelectOrderByStep;
 import org.jooq.impl.DSL;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
@@ -34,19 +50,20 @@ import java.sql.Timestamp;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static org.finos.waltz.schema.tables.EntityRelationship.ENTITY_RELATIONSHIP;
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.common.DateTimeUtilities.toLocalDateTime;
 import static org.finos.waltz.common.ListUtilities.newArrayList;
-import static org.finos.waltz.model.EntityReference.mkRef;
+import static org.finos.waltz.schema.tables.EntityRelationship.ENTITY_RELATIONSHIP;
 
 
 @Repository
 public class EntityRelationshipDao {
 
+    private static final Logger LOG = LoggerFactory.getLogger(EntityRelationshipDao.class);
 
     private static final List<EntityKind> POSSIBLE_ENTITIES = newArrayList(
             EntityKind.APPLICATION,
@@ -68,18 +85,34 @@ public class EntityRelationshipDao {
             POSSIBLE_ENTITIES);
 
 
+    private static final Field<String> EXT_ID_A = InlineSelectFieldFactory.mkExternalIdField(
+            ENTITY_RELATIONSHIP.ID_A,
+            ENTITY_RELATIONSHIP.KIND_A,
+            POSSIBLE_ENTITIES);
+
+
+    private static final Field<String> EXT_ID_B = InlineSelectFieldFactory.mkExternalIdField(
+            ENTITY_RELATIONSHIP.ID_B,
+            ENTITY_RELATIONSHIP.KIND_B,
+            POSSIBLE_ENTITIES);
+
+
     private static final RecordMapper<Record, EntityRelationship> TO_DOMAIN_MAPPER = r -> {
         EntityRelationshipRecord record = r.into(ENTITY_RELATIONSHIP);
         return ImmutableEntityRelationship.builder()
                 .id(record.getId())
-                .a(mkRef(
-                        EntityKind.valueOf(record.getKindA()),
-                        record.getIdA(),
-                        r.get(NAME_A)))
-                .b(mkRef(
-                        EntityKind.valueOf(record.getKindB()),
-                        record.getIdB(),
-                        r.get(NAME_B)))
+                .a(ImmutableEntityReference.builder()
+                        .kind(EntityKind.valueOf(record.getKindA()))
+                        .id(record.getIdA())
+                        .name(Optional.ofNullable(r.get(NAME_A)).orElse("_Removed_"))
+                        .externalId(Optional.ofNullable(r.get(EXT_ID_A)))
+                        .build())
+                .b(ImmutableEntityReference.builder()
+                        .kind(EntityKind.valueOf(record.getKindB()))
+                        .id(record.getIdB())
+                        .name(Optional.ofNullable(r.get(NAME_B)).orElse("_Removed_"))
+                        .externalId(Optional.ofNullable(r.get(EXT_ID_B)))
+                        .build())
                 .provenance(record.getProvenance())
                 .relationship(record.getRelationship())
                 .description(record.getDescription())
@@ -153,6 +186,7 @@ public class EntityRelationshipDao {
         return dsl
                 .select(ENTITY_RELATIONSHIP.fields())
                 .select(NAME_A, NAME_B)
+                .select(EXT_ID_A, EXT_ID_B)
                 .from(ENTITY_RELATIONSHIP)
                 .where(ENTITY_RELATIONSHIP.ID.eq(id))
                 .fetchOne(TO_DOMAIN_MAPPER);
@@ -167,15 +201,6 @@ public class EntityRelationshipDao {
                 ? dsl.executeInsert(TO_RECORD_MAPPER.apply(entityRelationship))
                 : 0;
     }
-
-
-    @Deprecated
-    public boolean remove(EntityRelationship entityRelationship) {
-        checkNotNull(entityRelationship, "entityRelationship cannot be null");
-        EntityRelationshipKey key = entityRelationship.toKey();
-        return remove(key);
-    }
-
 
 
     public boolean create(EntityRelationship relationship) {
@@ -196,7 +221,8 @@ public class EntityRelationshipDao {
     public boolean update(EntityRelationshipKey key,
                           UpdateEntityRelationshipParams params,
                           String username) {
-        return dsl.update(ENTITY_RELATIONSHIP)
+        return dsl
+                .update(ENTITY_RELATIONSHIP)
                 .set(ENTITY_RELATIONSHIP.RELATIONSHIP, params.relationshipKind())
                 .set(ENTITY_RELATIONSHIP.DESCRIPTION, params.description())
                 .set(ENTITY_RELATIONSHIP.LAST_UPDATED_BY, username)
@@ -232,6 +258,7 @@ public class EntityRelationshipDao {
         return dsl
                 .select(ENTITY_RELATIONSHIP.fields())
                 .select(NAME_A, NAME_B)
+                .select(EXT_ID_A, EXT_ID_B)
                 .from(ENTITY_RELATIONSHIP)
                 .where(condition)
                 .fetch(TO_DOMAIN_MAPPER);
@@ -240,19 +267,44 @@ public class EntityRelationshipDao {
 
     private boolean exists(EntityRelationshipKey key) {
 
-        int count = dsl.fetchCount(
-                DSL.select()
-                        .from(ENTITY_RELATIONSHIP)
-                        .where(mkExactKeyMatchCondition(key)));
-
-        return count > 0;
-    }
+        return dsl
+                .fetchExists(
+                    DSL.select()
+                       .from(ENTITY_RELATIONSHIP)
+                       .where(mkExactKeyMatchCondition(key)));
+        }
 
 
     private Condition mkExactRefMatchCondition(EntityReference ref) {
         Condition matchesA = ENTITY_RELATIONSHIP.ID_A.eq(ref.id()).and(ENTITY_RELATIONSHIP.KIND_A.eq(ref.kind().name()));
         Condition matchesB = ENTITY_RELATIONSHIP.ID_B.eq(ref.id()).and(ENTITY_RELATIONSHIP.KIND_B.eq(ref.kind().name()));
         return matchesA.or(matchesB);
+    }
+
+    public Collection<EntityRelationship> getEntityRelationshipsByKind(org.finos.waltz.model.rel.RelationshipKind relationshipKind) {
+        return dsl
+                .select(ENTITY_RELATIONSHIP.fields())
+                .from(ENTITY_RELATIONSHIP)
+                .where(ENTITY_RELATIONSHIP.RELATIONSHIP.eq(relationshipKind.code()))
+                .fetch(r -> {
+                    EntityRelationshipRecord record = r.into(ENTITY_RELATIONSHIP);
+                    return ImmutableEntityRelationship.builder()
+                            .id(record.getId())
+                            .a(ImmutableEntityReference.builder()
+                                    .kind(EntityKind.valueOf(record.getKindA()))
+                                    .id(record.getIdA())
+                                    .build())
+                            .b(ImmutableEntityReference.builder()
+                                    .kind(EntityKind.valueOf(record.getKindB()))
+                                    .id(record.getIdB())
+                                    .build())
+                            .provenance(record.getProvenance())
+                            .relationship(record.getRelationship())
+                            .description(record.getDescription())
+                            .lastUpdatedBy(record.getLastUpdatedBy())
+                            .lastUpdatedAt(toLocalDateTime(record.getLastUpdatedAt()))
+                            .build();
+                });
     }
 
 
@@ -282,7 +334,8 @@ public class EntityRelationshipDao {
         
         Query[] queries  = changeInitiativeIds
                 .stream()
-                .map(ci -> DSL.insertInto(ENTITY_RELATIONSHIP)
+                .map(ci -> DSL
+                        .insertInto(ENTITY_RELATIONSHIP)
                         .set(ENTITY_RELATIONSHIP.KIND_A, EntityKind.APP_GROUP.name())
                         .set(ENTITY_RELATIONSHIP.ID_A, groupId)
                         .set(ENTITY_RELATIONSHIP.KIND_B, EntityKind.CHANGE_INITIATIVE.name())
@@ -302,9 +355,109 @@ public class EntityRelationshipDao {
         checkNotNull(groupId, "groupId cannot be null");
         checkNotNull(changeInitiativeIds, "changeInitiativeIds cannot be null");
 
-        return dsl.delete(ENTITY_RELATIONSHIP)
+        return dsl
+                .delete(ENTITY_RELATIONSHIP)
                 .where(ENTITY_RELATIONSHIP.ID_A.eq(groupId))
                 .and(ENTITY_RELATIONSHIP.ID_B.in(changeInitiativeIds))
                 .execute();
+    }
+
+
+    public void migrateEntityRelationships(EntityReference sourceReference, EntityReference targetReference, String userId) {
+
+        dsl.transaction(ctx -> {
+
+            DSLContext tx = ctx.dsl();
+
+            LOG.info("Migrating entity relationships from source: {}/{} to target: {}/{}",
+                    sourceReference.kind().prettyName(),
+                    sourceReference.id(),
+                    targetReference.kind().prettyName(),
+                    targetReference.id());
+
+            Condition measurableIsA = Tables.ENTITY_RELATIONSHIP.ID_A.eq(sourceReference.id()).and(Tables.ENTITY_RELATIONSHIP.KIND_A.eq(sourceReference.kind().name()));
+            Condition measurableIsB = Tables.ENTITY_RELATIONSHIP.ID_B.eq(sourceReference.id()).and(Tables.ENTITY_RELATIONSHIP.KIND_B.eq(sourceReference.kind().name()));
+
+            SelectOrderByStep<Record3<Long, String, String>> allowedKindAUpdates = selectKindARelationshipsThatCanBeAdded(sourceReference, targetReference);
+
+            int kindARelsUpdated = tx
+                    .update(Tables.ENTITY_RELATIONSHIP)
+                    .set(Tables.ENTITY_RELATIONSHIP.ID_A, targetReference.id())
+                    .set(Tables.ENTITY_RELATIONSHIP.LAST_UPDATED_AT, DateTimeUtilities.nowUtcTimestamp())
+                    .set(Tables.ENTITY_RELATIONSHIP.LAST_UPDATED_BY, userId)
+                    .from(allowedKindAUpdates)
+                    .where(measurableIsA)
+                    .and(Tables.ENTITY_RELATIONSHIP.KIND_B.eq(allowedKindAUpdates.field(Tables.ENTITY_RELATIONSHIP.KIND_B))
+                            .and(Tables.ENTITY_RELATIONSHIP.ID_B.eq(allowedKindAUpdates.field(Tables.ENTITY_RELATIONSHIP.ID_B))
+                                    .and(Tables.ENTITY_RELATIONSHIP.RELATIONSHIP.eq(allowedKindAUpdates.field(Tables.ENTITY_RELATIONSHIP.RELATIONSHIP)))))
+                    .execute();
+
+            SelectOrderByStep<Record3<Long, String, String>> allowedKindBUpdates = selectKindBRelationshipsThatCanBeAdded(sourceReference, targetReference);
+
+            int kindBRelsUpdated = tx
+                    .update(Tables.ENTITY_RELATIONSHIP)
+                    .set(Tables.ENTITY_RELATIONSHIP.ID_B, targetReference.id())
+                    .set(Tables.ENTITY_RELATIONSHIP.LAST_UPDATED_AT, DateTimeUtilities.nowUtcTimestamp())
+                    .set(Tables.ENTITY_RELATIONSHIP.LAST_UPDATED_BY, userId)
+                    .from(allowedKindBUpdates)
+                    .where(measurableIsB)
+                    .and(Tables.ENTITY_RELATIONSHIP.KIND_A.eq(allowedKindBUpdates.field(Tables.ENTITY_RELATIONSHIP.KIND_A))
+                            .and(Tables.ENTITY_RELATIONSHIP.ID_A.eq(allowedKindBUpdates.field(Tables.ENTITY_RELATIONSHIP.ID_A))
+                                    .and(Tables.ENTITY_RELATIONSHIP.RELATIONSHIP.eq(allowedKindBUpdates.field(Tables.ENTITY_RELATIONSHIP.RELATIONSHIP)))))
+                    .execute();
+
+            int entityRelsRemoved = tx
+                    .deleteFrom(Tables.ENTITY_RELATIONSHIP)
+                    .where(measurableIsA.or(measurableIsB))
+                    .execute();
+
+            LOG.info("Migrated {} relationships from source: {}/{} to target: {}/{}",
+                    kindARelsUpdated + kindBRelsUpdated,
+                    sourceReference.kind().prettyName(),
+                    sourceReference.id(),
+                    targetReference.kind().prettyName(),
+                    targetReference.id());
+
+            LOG.info("Removed {} relationships that could not be migrated from source: {}/{} to target: {}/{} as a relationship already exists",
+                    entityRelsRemoved,
+                    sourceReference.kind().prettyName(),
+                    sourceReference.id(),
+                    targetReference.kind().prettyName(),
+                    targetReference.id());
+        });
+    }
+
+    private SelectOrderByStep<Record3<Long, String, String>> selectKindARelationshipsThatCanBeAdded(EntityReference source, EntityReference target) {
+
+        SelectConditionStep<Record3<Long, String, String>> targets = DSL
+                .select(Tables.ENTITY_RELATIONSHIP.ID_B, Tables.ENTITY_RELATIONSHIP.KIND_B, Tables.ENTITY_RELATIONSHIP.RELATIONSHIP)
+                .from(Tables.ENTITY_RELATIONSHIP)
+                .where(Tables.ENTITY_RELATIONSHIP.ID_A.eq(target.id())
+                        .and(Tables.ENTITY_RELATIONSHIP.KIND_A.eq(target.kind().name())));
+
+        SelectConditionStep<Record3<Long, String, String>> migrations = DSL
+                .select(Tables.ENTITY_RELATIONSHIP.ID_B, Tables.ENTITY_RELATIONSHIP.KIND_B, Tables.ENTITY_RELATIONSHIP.RELATIONSHIP)
+                .from(Tables.ENTITY_RELATIONSHIP)
+                .where(Tables.ENTITY_RELATIONSHIP.ID_A.eq(source.id())
+                        .and(Tables.ENTITY_RELATIONSHIP.KIND_A.eq(source.kind().name())));
+
+        return migrations.except(targets);
+    }
+
+    private SelectOrderByStep<Record3<Long, String, String>> selectKindBRelationshipsThatCanBeAdded(EntityReference source, EntityReference target) {
+
+        SelectConditionStep<Record3<Long, String, String>> targets = DSL
+                .select(Tables.ENTITY_RELATIONSHIP.ID_A, Tables.ENTITY_RELATIONSHIP.KIND_A, Tables.ENTITY_RELATIONSHIP.RELATIONSHIP)
+                .from(Tables.ENTITY_RELATIONSHIP)
+                .where(Tables.ENTITY_RELATIONSHIP.ID_B.eq(target.id())
+                        .and(Tables.ENTITY_RELATIONSHIP.KIND_B.eq(target.kind().name())));
+
+        SelectConditionStep<Record3<Long, String, String>> migrations = DSL
+                .select(Tables.ENTITY_RELATIONSHIP.ID_A, Tables.ENTITY_RELATIONSHIP.KIND_A, Tables.ENTITY_RELATIONSHIP.RELATIONSHIP)
+                .from(Tables.ENTITY_RELATIONSHIP)
+                .where(Tables.ENTITY_RELATIONSHIP.ID_B.eq(source.id())
+                        .and(Tables.ENTITY_RELATIONSHIP.KIND_B.eq(source.kind().name())));
+
+        return migrations.except(targets);
     }
 }

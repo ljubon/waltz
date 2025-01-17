@@ -39,23 +39,34 @@ const initialState = {
 };
 
 
-function mkTableData(surveyRuns = [], surveyInstances = []) {
+function mkTableData(surveyRuns = [], surveyInstances = [], templates = []) {
     const runsById = _.keyBy(surveyRuns, "id");
+    const templatesById = _.keyBy(templates, "id");
 
-    const surveys = _.map(surveyInstances, instance => {
-        return {
-            "surveyInstance": instance,
-            "surveyRun": runsById[instance.surveyRunId],
-            "surveyEntity": instance.surveyEntity
-        }
-    });
+    const surveys = _.map(
+        surveyInstances,
+        instance => {
+            const run = runsById[instance.surveyRunId];
+            const template = run
+                ? templatesById[run.surveyTemplateId]
+                : null;
+
+            return {
+                "surveyInstance": instance,
+                "surveyRun": run,
+                "surveyEntity": instance.surveyEntity,
+                "surveyTemplate": template
+            };
+        });
 
     const now = moment();
-    const grouped = _.groupBy(surveys, s => {
-        const subMoment = moment(s.surveyInstance.submittedAt);
-        return s.surveyInstance.status == "WITHDRAWN" || now.diff(subMoment, "months") >= 12 ? "ARCHIVE" : "CURRENT"
-    });
-    return grouped;
+
+    return _.groupBy(
+        surveys,
+        s => {
+            const subMoment = moment(s.surveyInstance.submittedAt);
+            return s.surveyInstance.status === "WITHDRAWN" || now.diff(subMoment, "months") >= 12 ? "ARCHIVE" : "CURRENT"
+        });
 }
 
 
@@ -68,9 +79,9 @@ function controller($q, serviceBroker) {
     };
 
     vm.determineViewState = (surveyInstance) => {
-        return surveyInstance.status === 'COMPLETED' || surveyInstance.status === 'APPROVED'
-            ? 'main.survey.instance.response.view'
-            : 'main.survey.instance.response.edit';
+        return surveyInstance.status === "COMPLETED" || surveyInstance.status === "APPROVED"
+            ? "main.survey.instance.response.view"
+            : "main.survey.instance.response.edit";
     };
 
     vm.$onChanges = () => {
@@ -78,33 +89,37 @@ function controller($q, serviceBroker) {
             let runsPromise;
             let instancesPromise;
 
-            if (vm.parentEntityRef.kind === 'PERSON') {
+            const templatePromise = serviceBroker.loadAppData(
+                CORE_API.SurveyTemplateStore.findAll,
+                []);
+
+            if (vm.parentEntityRef.kind === "PERSON") {
                 runsPromise = serviceBroker.loadViewData(
                     CORE_API.SurveyRunStore.findForRecipientId,
                     [vm.parentEntityRef.id],
-                    { force: true });
+                    {force: true});
 
                 instancesPromise = serviceBroker.loadViewData(
                     CORE_API.SurveyInstanceStore.findForRecipientId,
                     [vm.parentEntityRef.id],
-                    { force: true });
+                    {force: true});
             } else {
                 runsPromise = serviceBroker.loadViewData(
-                        CORE_API.SurveyRunStore.findByEntityReference,
-                        [vm.parentEntityRef],
-                        { force: true });
+                    CORE_API.SurveyRunStore.findByEntityReference,
+                    [vm.parentEntityRef],
+                    {force: true});
 
                 instancesPromise = serviceBroker.loadViewData(
-                        CORE_API.SurveyInstanceStore.findByEntityReference,
-                        [vm.parentEntityRef],
-                        { force: true });
+                    CORE_API.SurveyInstanceStore.findByEntityReference,
+                    [vm.parentEntityRef],
+                    {force: true});
             }
 
             vm.visibility.showSurveySubject = ! isSurveyTargetKind(vm.parentEntityRef.kind);
 
-            $q.all([runsPromise, instancesPromise])
-                .then(([runsResult, instancesResult]) =>
-                    vm.surveys = mkTableData(runsResult.data, instancesResult.data));
+            $q.all([runsPromise, instancesPromise, templatePromise])
+                .then(([runsResult, instancesResult, templateResult]) =>
+                    vm.surveys = mkTableData(runsResult.data, instancesResult.data, templateResult.data));
         }
     };
 

@@ -18,13 +18,12 @@
 
 package org.finos.waltz.web.endpoints.api;
 
+import org.finos.waltz.model.cost.CostKindWithYears;
 import org.finos.waltz.service.cost_kind.CostKindService;
 import org.finos.waltz.web.ListRoute;
 import org.finos.waltz.web.endpoints.Endpoint;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.IdSelectionOptions;
-import org.finos.waltz.model.cost.EntityCostKind;
-import org.jooq.lambda.tuple.Tuple2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -52,10 +51,13 @@ public class CostKindEndpoint implements Endpoint {
 
         String findAllPath = mkPath(BASE_URL);
         String findCostKindsBySelectorPath = mkPath(BASE_URL, "target-kind", ":kind", "selector");
+        String findCostKindsBySubjectKindPath = mkPath(BASE_URL, "subject-kind", ":kind");
 
-        ListRoute<EntityCostKind> findAllRoute = (request, response) -> costKindService.findAll();
+        ListRoute<CostKindWithYears> findAllRoute = (request, response) -> costKindService.findAll();
+        ListRoute<CostKindWithYears> findBySubjectKindRoute = (request, response) -> costKindService
+                .findCostKindsBySubjectKind(getKind(request));
 
-        ListRoute<Tuple2<EntityCostKind, Integer>> findCostKindsBySelectorRoute = (request, response) -> {
+        ListRoute<CostKindWithYears> findCostKindsBySelectorRoute = (request, response) -> {
             EntityKind targetKind = getKind(request);
             IdSelectionOptions selectionOptions = readIdSelectionOptionsFromBody(request);
             return costKindService.findCostKindsSelectorRoute(targetKind, selectionOptions);
@@ -63,6 +65,7 @@ public class CostKindEndpoint implements Endpoint {
 
         getForList(findAllPath, findAllRoute);
         postForList(findCostKindsBySelectorPath, findCostKindsBySelectorRoute);
+        getForList(findCostKindsBySubjectKindPath, findBySubjectKindRoute);
     }
 
 }

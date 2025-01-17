@@ -13,20 +13,20 @@ Learn more
 Getting started
  - [Building](docs/development/build.md) 
  - [Running](waltz-web/README.md)
- - [Docker](docker/DOCKER.md)
+ - [Docker](docker/README.md)
 
 ---
+[![FINOS Hosted Platform - Waltz Demo](https://img.shields.io/badge/FINOS%20Hosted%20Platform-Waltz%20Demo-blue)](https://demo.waltz.finos.org/)
 [![postgres build](https://github.com/finos/waltz/actions/workflows/maven.yml/badge.svg)](https://github.com/finos/waltz/actions)
-[![Language Grade: JavaScript](https://img.shields.io/lgtm/grade/javascript/g/khartec/waltz.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/khartec/waltz/context:javascript) 
-[![Language Grade: Java](https://img.shields.io/lgtm/grade/java/g/khartec/waltz.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/khartec/waltz/context:java)
+[![Latest Version](https://badgers.space/github/release/finos/waltz)](https://github.com/finos/waltz/releases)
 [![FINOS - Active](https://cdn.jsdelivr.net/gh/finos/contrib-toolbox@master/images/badge-active.svg)](https://finosfoundation.atlassian.net/wiki/display/FINOS/Active)
 
 ## Corporate Contributors
 
-Org | | Notes
---- | --- |---
-![DB Logo](https://avatars1.githubusercontent.com/u/34654027?s=30&v=4 "Deutsche Bank") | Deutsche Bank | [press release](https://www.db.com/newsroom_news/2018/deutsche-bank-takes-next-step-in-open-source-journey-en-11484.htm) 
-![NWM Logo](https://avatars2.githubusercontent.com/u/54027700?s=30&v=4 "Natwest Markets") | NatWest Markets | [press release](https://www.nwm.com/about-us/media/articles/natwest-markets-to-expand-open-source-coding)
+| Org                                                                                       |                 | Notes                                                                                                                    |
+|-------------------------------------------------------------------------------------------|-----------------|--------------------------------------------------------------------------------------------------------------------------|
+| ![DB Logo](https://avatars1.githubusercontent.com/u/34654027?s=30&v=4 "Deutsche Bank")    | Deutsche Bank   | [press release](https://www.db.com/newsroom_news/2018/deutsche-bank-takes-next-step-in-open-source-journey-en-11484.htm) |
+| ![NWM Logo](https://avatars2.githubusercontent.com/u/54027700?s=30&v=4 "NatWest Markets") | NatWest Markets | [press release](https://www.nwm.com/about-us/media/articles/natwest-markets-to-expand-open-source-coding)                |
 
 ## Technology Stack
 
@@ -42,30 +42,45 @@ See [pom.xml](https://github.com/finos/waltz/blob/master/pom.xml) for a full lis
 
 ### Supported Databases
 
-- Postgres 
-- Microsoft SQL Server (2012+)  
-  - requires [JOOQ Pro license](https://www.jooq.org/download/) to build from source
+- Postgres
+- Microsoft SQL Server (2017+)
+    - requires [JOOQ Pro license](https://www.jooq.org/download/) to build from source
 
 
 ### Client
 
 - Browser based
-    - IE 10+, Chrome, Safari, Firefox)
+    - Chrome, Safari, Firefox, Edge
 - AngularJS 1.7
+- Svelte
 - Bootstrap 3
-- D3 
+- D3
 
-See [package.json](https://github.com/finos/waltz/blob/master/waltz-ng/package.json) for full list of javascript dependencies.
+See [package.json](https://github.com/finos/waltz/blob/master/waltz-ng/package.json) for full list of javascript
+dependencies.
 
-## Roadmap
+## Roadmap / Releases
 
-Checkout [the project milestones](https://github.com/finos/waltz/milestones) and browse through the Todo, work in progress and done issues.
+Checkout [the project milestones](https://github.com/finos/waltz/milestones) and browse through the Todo, work in
+progress and done issues.
+
+**Provisional** dates for upcoming releases:
+
+| Release | Date     | Provisional Change Summary   |
+|---------|----------|------------------------------|
+| 1.66    | Nov 2024   | AGF Survey Changes and Fixes | 
+| 1.67    | Dec 2024 | TBC                          | 
+
+See the [releases](https://github.com/finos/waltz/releases) page for historic versions.
+
+
 
 ## Contributing
 
 1. Fork it (<https://github.com/finos/waltz/fork>)
 2. Create your feature branch (`git checkout -b feature/fooBar`)
-3. Read our [contribution guidelines](.github/CONTRIBUTING.md) and [Community Code of Conduct](https://www.finos.org/code-of-conduct)
+3. Read our [contribution guidelines](CONTRIBUTING.md)
+   and [Community Code of Conduct](https://www.finos.org/code-of-conduct)
 4. Commit your changes (`git commit -am 'Add some fooBar'`)
 5. Push to the branch (`git push origin feature/fooBar`)
 6. Create a new Pull Request
@@ -83,8 +98,12 @@ Individual and organisational contributors are listed in [the contributors file]
 
 ## License
 
-Copyright (C) 2021 Waltz open source project
+Copyright (C) 2024 Waltz open source project
 
 Distributed under the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0).
 
 SPDX-License-Identifier: [Apache-2.0](https://spdx.org/licenses/Apache-2.0)
+
+## Security Reporting
+
+Please refer to the Waltz [Security Policy](SECURITY.md) page.

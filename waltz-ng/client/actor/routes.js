@@ -17,6 +17,7 @@
  */
 
 import actorView from "./pages/actor-view/actor-view";
+import listView from "./pages/list-view/actor-list-view";
 
 
 const baseState = {
@@ -26,14 +27,21 @@ const baseState = {
 
 const viewState = {
     url: "/{id:int}",
-    views: { "content@": actorView }
+    views: {"content@": actorView}
+};
+
+
+const listViewState = {
+    url: "/list",
+    views: {"content@": listView.id}
 };
 
 
 function setup($stateProvider) {
     $stateProvider
         .state("main.actor", baseState)
-        .state("main.actor.view", viewState);
+        .state("main.actor.view", viewState)
+        .state("main.actor.list", listViewState);
 }
 
 

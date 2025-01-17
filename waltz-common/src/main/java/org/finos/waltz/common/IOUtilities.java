@@ -52,7 +52,7 @@ public class IOUtilities {
             throws IOException
     {
         checkNotNull(input, "Input stream cannot be null");
-        checkNotNull(input, "Output stream cannot be null");
+        checkNotNull(output, "Output stream cannot be null");
 
         byte[] buff = new byte[1024];
         int bytesRead;
@@ -66,7 +66,7 @@ public class IOUtilities {
         checkNotNull(stream, "stream must not be null");
 
         return streamLines(stream)
-                .collect(Collectors.joining());
+                .collect(Collectors.joining("\n"));
     }
 
 

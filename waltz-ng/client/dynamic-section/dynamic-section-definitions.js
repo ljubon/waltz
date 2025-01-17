@@ -16,6 +16,7 @@
  *
  */
 import BookmarkPanel from "../bookmarks/svelte/BookmarkPanel.svelte";
+import InvolvementsSection from "../involvement-kind/components/svelte/InvolvementsSection.svelte";
 
 
 const appsSection = {
@@ -85,7 +86,7 @@ const entityNamedNotesSection = {
 
 const entityStatisticSection = {
     componentId: "entity-statistic-section",
-    name: "Indicators",
+    name: "Statistics",
     icon: "pie-chart",
     description: "Statistics for this entity",
     id: 11,
@@ -116,10 +117,10 @@ const logicalFlowsTabgroupSection = {
 };
 
 const measurableRatingAppSection = {
-    componentId: "measurable-rating-app-section",
+    componentId: "measurable-rating-entity-section",
     name: "Ratings / Roadmaps",
     icon: "puzzle-piece",
-    description: "Viewpoints linked to this application with a rating",
+    description: "Viewpoints linked to this entity with a rating",
     id: 15,
 };
 
@@ -157,7 +158,7 @@ const technologySummarySection = {
 
 const entityStatisticSummarySection = {
     componentId: "entity-statistic-summary-section",
-    name: "Indicators",
+    name: "Statistics",
     icon: "pie-chart",
     description: "Summarised statistics for apps related to this entity, can be used to drill down into history",
     id: 20
@@ -340,7 +341,7 @@ const personMeasurableInvolvementsSection = {
 
 const reportGridViewSection = {
     componentId: "report-grid-view-section",
-    name: "Reports",
+    name: "Report Grids",
     icon: "cloud",
     description: "Reports composed of viewpoint ratings, assessment ratings and costs for applications related to this entity",
     id: 170
@@ -425,6 +426,53 @@ const entityAttestationSection = {
     id: 10001
 };
 
+const legalEntitySection = {
+    // svelteComponent: LegalEntitySection,
+    componentId: "legal-entity-section",
+    name: "Legal Entity Relationships",
+    icon: "building-o",
+    description: "Legal Entity relationships related to this entity",
+    id: 10010,
+};
+
+
+const legalEntityRelationshipKindSection = {
+    // svelteComponent: LegalEntityRelationshipSection,
+    componentId: "legal-entity-relationship-kind-section",
+    name: "Relationships",
+    icon: "link",
+    description: "Relationships between legal entities and other waltz entities of this relationship kind",
+    id: 10020,
+};
+
+
+const taxonomyChangesSection = {
+    componentId: "taxonomy-changes-section",
+    name: "Taxonomy Changes",
+    icon: "cog",
+    description: " This section lists any formal changes against this taxonomy. These changes are ones that have been defined and applied in Waltz.",
+    id: 10030,
+};
+
+
+const dataTypeDecoratorSection = {
+    componentId: "data-type-decorator-section",
+    name: "Data Types",
+    icon: "qrcode",
+    description: "Data Types decorating this entity",
+    id: 10040,
+};
+
+const involvementsSection = {
+    svelteComponent: InvolvementsSection,
+    componentId: "involvements-section",
+    name: "Involvements",
+    icon: "users",
+    description: "Involvements for this involvement kind",
+    id: 10050,
+};
+
+
 export const dynamicSections = {
     appCostsSection,
     appCostsSummarySection,
@@ -441,6 +489,7 @@ export const dynamicSections = {
     companionAppRulesSection,
     companionDataTypeRulesSection,
     dataFlowSection,
+    dataTypeDecoratorSection,
     dataTypeFlowSection,
     dataTypeOriginatorsSection,
     entityAttestationSection,
@@ -451,6 +500,9 @@ export const dynamicSections = {
     entityStatisticSummarySection,
     flowSpecDefinitionSection,
     involvedPeopleSection,
+    involvementsSection,
+    legalEntitySection,
+    legalEntityRelationshipKindSection,
     licenceSection,
     logicalDataElementsSection,
     logicalFlowsTabgroupSection,
@@ -475,6 +527,7 @@ export const dynamicSections = {
     softwarePackageVersions,
     specificationDefinitionSection,
     surveySection,
+    taxonomyChangesSection,
     technologySection,
     technologySummarySection
 };
@@ -499,6 +552,7 @@ const appSections = [
     entityNamedNotesSection,
     entityStatisticSection,
     involvedPeopleSection,
+    legalEntitySection,
     measurableRatingAppSection,
     surveySection,
     technologySection,
@@ -507,6 +561,7 @@ const appSections = [
 
 const actorSections = [
     appsSection,
+    assessmentRatingSection,
     bookmarksSection,
     changeInitiativeSection,
     dataFlowSection,
@@ -548,13 +603,15 @@ const orgUnitSections = [
              entityStatisticSummarySection,
              measurableRatingsBrowserSection,
              reportGridViewSection,
-             technologySummarySection,
+             technologySummarySection
          ]),
+    entityDiagramsSection,
     bookmarksSection,
     changeInitiativeSection,
     changeSetSection,
     involvedPeopleSection,
     pack(logicalFlowsTabgroupSection, [flowClassificationRulesSection]),
+    legalEntitySection,
     orgUnitDirectMeasurableSection,
     changeLogSection
 ];
@@ -569,15 +626,28 @@ const measurableSections = [
              technologySummarySection
          ]),
     bookmarksSection,
+    assessmentRatingSection,
     changeSetSection,
     entityDiagramsSection,
     entityNamedNotesSection,
     involvedPeopleSection,
     pack(logicalFlowsTabgroupSection, [flowClassificationRulesSection]),
+    legalEntitySection,
     measurableRatingExplorerSection,
     relatedMeasurablesSection,
+    relatedDataTypesSection,
     changeLogSection
 ];
+
+
+const measurableRatingSections = [
+    bookmarksSection,
+    assessmentRatingSection,
+    entityNamedNotesSection,
+    involvedPeopleSection,
+    changeLogSection
+];
+
 
 const personSections = [
     bookmarksSection,
@@ -593,10 +663,12 @@ const personSections = [
              reportGridViewSection,
              technologySummarySection
          ]),
+    entityDiagramsSection,
     personChangeSetSection,
     personHierarchySection,
-    surveySection,
     personMeasurableInvolvementsSection,
+    legalEntitySection,
+    surveySection,
     changeLogSection
 ];
 
@@ -608,6 +680,7 @@ const dataTypeSections = [
     entityNamedNotesSection,
     involvedPeopleSection,
     logicalDataElementsSection,
+    reportGridViewSection,
     pack(logicalFlowsTabgroupSection, [flowClassificationRulesSection]),
     changeLogSection
 ];
@@ -624,12 +697,37 @@ const appGroupSections = [
              technologySummarySection
          ]),
     bookmarksSection,
+    entityDiagramsSection,
     changeInitiativeSection,
     changeSetSection,
     entityNamedNotesSection,
     involvedPeopleSection,
     pack(logicalFlowsTabgroupSection, [flowClassificationRulesSection]),
+    legalEntitySection,
     relatedAppGroupsSection,
+    relatedDataTypesSection,
+    relatedMeasurablesSection,
+    changeLogSection
+];
+
+const appListSections = [
+    pack(appsSection,
+         [
+             appCostsSummarySection,
+             appComplexitySummarySection,
+             attestationSummarySection,
+             entityStatisticSummarySection,
+             measurableRatingsBrowserSection,
+             reportGridViewSection,
+             technologySummarySection
+         ]),
+    bookmarksSection,
+    entityDiagramsSection,
+    changeInitiativeSection,
+    changeSetSection,
+    entityNamedNotesSection,
+    pack(logicalFlowsTabgroupSection, [flowClassificationRulesSection]),
+    legalEntitySection,
     relatedDataTypesSection,
     relatedMeasurablesSection,
     changeLogSection
@@ -660,8 +758,18 @@ const flowDiagramSections = [
              reportGridViewSection,
              technologySummarySection
          ]),
+    entityDiagramsSection,
     bookmarksSection,
     entityNamedNotesSection,
+    changeLogSection
+];
+
+
+const involvementKindSections = [
+    assessmentRatingSection,
+    bookmarksSection,
+    entityNamedNotesSection,
+    involvementsSection,
     changeLogSection
 ];
 
@@ -676,6 +784,7 @@ const processDiagramSections = [
              reportGridViewSection,
              technologySummarySection
          ]),
+    entityDiagramsSection,
     bookmarksSection,
     entityNamedNotesSection,
     changeLogSection
@@ -695,6 +804,7 @@ const physicalFlowSections = [
 const logicalDataFlowSections = [
     assessmentRatingSection,
     bookmarksSection,
+    dataTypeDecoratorSection,
     entityDiagramsSection,
     entityNamedNotesSection,
     physicalFlowSection,
@@ -754,6 +864,7 @@ const databaseSections = [
 ];
 
 const flowClassificationRuleSections = [
+    assessmentRatingSection,
     bookmarksSection,
     companionAppRulesSection,
     companionDataTypeRulesSection,
@@ -762,12 +873,59 @@ const flowClassificationRuleSections = [
     changeLogSection
 ];
 
+const legalEntitySections = [
+    assessmentRatingSection,
+    bookmarksSection,
+    entityNamedNotesSection,
+    involvedPeopleSection,
+    legalEntitySection,
+    changeLogSection
+];
+
+const legalEntityRelationshipKindSections = [
+    assessmentRatingSection,
+    bookmarksSection,
+    entityNamedNotesSection,
+    involvedPeopleSection,
+    legalEntityRelationshipKindSection,
+    changeLogSection
+];
+
+const legalEntityRelationshipSections = [
+    assessmentRatingSection,
+    bookmarksSection,
+    entityNamedNotesSection,
+    involvedPeopleSection,
+    changeLogSection
+];
+
+const endUserApplicationSections = [
+    assessmentRatingSection,
+    bookmarksSection,
+    entityNamedNotesSection,
+    involvedPeopleSection,
+    dataFlowSection,
+    entityDiagramsSection,
+    measurableRatingAppSection,
+    changeLogSection
+];
+
+const roleSections = [
+    assessmentRatingSection,
+    bookmarksSection,
+    entityNamedNotesSection,
+    involvedPeopleSection,
+    changeLogSection
+]
+
+
 export const dynamicSectionsByKind = {
     "main.actor.view": actorSections,
     "main.app-group.view": appGroupSections,
     "main.app.asset-code": appSections,
     "main.app.external-id": appSections,
     "main.app.view": appSections,
+    "main.app": appListSections,
     "main.change-initiative.external-id": changeInitiativeSections,
     "main.change-initiative.view": changeInitiativeSections,
     "main.change-set.view": changeSetSections,
@@ -777,12 +935,18 @@ export const dynamicSectionsByKind = {
     "main.database.external-id": databaseSections,
     "main.database.view": databaseSections,
     "main.entity-relationship.view": entityRelationshipSections,
+    "main.end-user-application.view": endUserApplicationSections,
     "main.flow-classification-rule.view": flowClassificationRuleSections,
     "main.flow-diagram.view": flowDiagramSections,
+    "main.involvement-kind.view": involvementKindSections,
+    "main.legal-entity.view": legalEntitySections,
+    "main.legal-entity-relationship.view": legalEntityRelationshipSections,
+    "main.legal-entity-relationship-kind.view": legalEntityRelationshipKindSections,
     "main.licence.external-id": licenceSections,
     "main.licence.view": licenceSections,
     "main.logical-flow.view": logicalDataFlowSections,
     "main.measurable.view": measurableSections,
+    "main.measurable-rating.view": measurableRatingSections,
     "main.org-unit.view": orgUnitSections,
     "main.person.id": personSections,
     "main.person.userId": personSections,
@@ -790,6 +954,7 @@ export const dynamicSectionsByKind = {
     "main.physical-flow.view": physicalFlowSections,
     "main.physical-specification.view": physicalSpecificationSections,
     "main.process-diagram.view": processDiagramSections,
+    "main.role.view": roleSections,
     "main.scenario.view": scenarioSections,
     "main.software-package.view": softwarePackageSections
 };

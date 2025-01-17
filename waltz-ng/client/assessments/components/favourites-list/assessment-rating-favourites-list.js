@@ -17,81 +17,31 @@
  */
 
 import {initialiseData} from "../../../common";
-import _ from "lodash";
 import template from "./assessment-rating-favourites-list.html";
-import {mkAssessmentDefinitionsIdsKey} from "../../../user";
-import {CORE_API} from "../../../common/services/core-api-utils";
+import AssessmentFavouritesList from "./AssessmentFavouritesList.svelte";
+import {primaryEntityReference} from "../rating-editor/rating-store";
 
 
 const bindings = {
-    assessments: "<",
     parentEntityRef: "<"
 };
 
 
 const initialState = {
-    assessmentsWithRatings: [],
-    assessmentsWithoutRatings: [],
+    AssessmentFavouritesList
 };
 
 
-function getFavouriteAssessmentDefnIds(key, preferences, defaultList = []) {
-    const favouritesString = _.find(preferences, d => d.key === key, null);
-    return _.isNull(favouritesString) || _.isEmpty(favouritesString)
-        ? defaultList
-        : _
-            .chain(favouritesString.value)
-            .split(',')
-            .map(idString => _.toNumber(idString))
-            .value();
-}
-
-
-function controller(serviceBroker) {
+function controller() {
     const vm = initialiseData(this, initialState);
 
-    function isFavourite(id) {
-        return _.includes(vm.favouriteAssessmentDefnIds, id);
-    }
-
-    const filterAssessments = () => {
-        if (vm.assessments) {
-
-            const filtered = _
-                .chain(vm.assessments)
-                .filter(a => isFavourite(a.definition.id))
-                .value();
-
-            const valuePartitioned = _.partition(
-                filtered,
-                assessment => _.isNil(assessment.rating));
-
-            vm.assessmentsWithoutRatings = _.sortBy(valuePartitioned[0], d => d.definition.name);
-            vm.assessmentsWithRatings = _.sortBy(valuePartitioned[1], d => d.definition.name);
-        }
-    };
-
     vm.$onChanges = () => {
-
-        vm.defaultPrimaryList = _
-            .chain(vm.assessments)
-            .filter(a => a.definition.visibility === "PRIMARY")
-            .map(r => r.definition.id)
-            .value();
-
-        serviceBroker
-            .loadAppData(CORE_API.UserPreferenceStore.findAllForUser, [], {force: true})
-            .then(r => vm.favouriteAssessmentDefnIds = getFavouriteAssessmentDefnIds(
-                mkAssessmentDefinitionsIdsKey(vm.parentEntityRef),
-                r.data,
-                vm.defaultPrimaryList))
-            .then(() => filterAssessments());
-    };
+        primaryEntityReference.set(vm.parentEntityRef);
+    }
 }
 
 
 controller.$inject = [
-    "ServiceBroker"
 ];
 
 

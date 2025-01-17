@@ -30,44 +30,44 @@
     </waltz-section-actions>
     <div class="waltz-display-section">
         <div class="row">
-            <div class="col-sm-7">
-                <div class="row">
+            <div class="col-md-7">
+                <div class="row row-no-gutters">
                     <div class="col-sm-2 waltz-display-field-label">
                         Name
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <span ng-bind="$ctrl.app.name"></span>
                     </div>
 
                     <div class="col-sm-2 waltz-display-field-label">
                         Asset Code
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <waltz-asset-code-explorer application="$ctrl.app">
                         </waltz-asset-code-explorer>
                     </div>
                 </div>
 
-                <div class="row">
+                <div class="row row-no-gutters">
                     <div class="col-sm-2 waltz-display-field-label">
                         Lifecycle Phase
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <span ng-bind="$ctrl.app.lifecyclePhase | toDisplayName:'lifecyclePhase'"></span>
                     </div>
                     <div class="col-sm-2 waltz-display-field-label">
                         Type
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <span ng-bind="$ctrl.app.applicationKind | toDisplayName:'applicationKind'"></span>
                     </div>
                 </div>
 
-                <div class="row">
+                <div class="row row-no-gutters">
                     <div class="col-sm-2 waltz-display-field-label">
                         Owning Org Unit
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <a ng-bind='$ctrl.organisationalUnit.name'
                            ui-sref="main.org-unit.view ({ id: $ctrl.organisationalUnit.id })">
                         </a>
@@ -75,7 +75,7 @@
                     <div class="col-sm-2 waltz-display-field-label">
                         Overall Rating
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <waltz-rating-indicator-cell rating="$ctrl.app.overallRating | useDefaultRatingScheme:'investment' "
                                                      show-description-popup="true"
                                                      show-name="true">
@@ -83,44 +83,22 @@
                     </div>
                 </div>
 
-                <div class="row">
+                <div class="row row-no-gutters">
                     <div class="col-sm-2 waltz-display-field-label">
                         Aliases
                     </div>
                     <div class="col-sm-4">
-                        <waltz-keyword-list ng-if="!$ctrl.visibility.aliasEditor"
-                                            keywords="$ctrl.aliases">
-                            <last>
-                                <span class="small">
-                                    <a ng-click="$ctrl.showAliasEditor()"
-                                       class="clickable">
-                                        update
-                                    </a>
-                                </span>
-                            </last>
-                            <empty>
-                                <i class="text-muted">
-                                    No aliases defined,
-                                    <a class="clickable"
-                                       ng-click="$ctrl.showAliasEditor()">
-                                        add one.
-                                    </a>
-                                </i>
-                            </empty>
-                        </waltz-keyword-list>
-
-                        <waltz-keyword-edit ng-if="$ctrl.visibility.aliasEditor"
-                                            keywords="$ctrl.aliases"
-                                            on-save="$ctrl.saveAliases"
-                                            on-cancel="$ctrl.dismissAliasEditor">
-                        </waltz-keyword-edit>
+                        <waltz-svelte-component component="$ctrl.AliasControl"
+                                                parent-entity-reference="$ctrl.parentEntityRef"
+                                                editable="true">
+                        </waltz-svelte-component>
                     </div>
                     <div class="col-sm-2 waltz-display-field-label">
                         Tags
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-tags-list">
                         <waltz-tag-list ng-if="!$ctrl.visibility.tagEditor"
-                                            keywords="$ctrl.tags">
+                                        keywords="$ctrl.tags">
                             <last>
                                 <span class="small">
                                     <a ng-click="$ctrl.showTagEditor()"
@@ -151,11 +129,11 @@
                     </div>
                 </div>
 
-                <div class="row">
+                <div class="row row-no-gutters">
                     <div class="col-sm-2 waltz-display-field-label">
-                        Complexity Rating:
+                        Complexity Rating
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <span ng-if="$ctrl.complexities.length > 0"
                               class='waltz-clickable-definition'
                               popover-trigger="focus"
@@ -173,16 +151,16 @@
                     <div class="col-sm-2 waltz-display-field-label">
                         Business Criticality
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <span ng-bind="$ctrl.app.businessCriticality | toDisplayName:'criticality'"></span>
                     </div>
                 </div>
 
-                <div class="row">
+                <div class="row row-no-gutters">
                     <div class="col-sm-2 waltz-display-field-label">
-                        Planned Retirement:
+                        Planned Retirement
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <waltz-from-now ng-if="$ctrl.app.plannedRetirementDate"
                                         timestamp="$ctrl.app.plannedRetirementDate"
                                         days-only="true">
@@ -192,9 +170,9 @@
                         </span>
                     </div>
                     <div class="col-sm-2 waltz-display-field-label">
-                        Actual Retirement:
+                        Actual Retirement
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <waltz-from-now ng-if="$ctrl.app.actualRetirementDate"
                                         timestamp="$ctrl.app.actualRetirementDate"
                                         days-only="true">
@@ -204,11 +182,11 @@
                         </span>
                     </div>
                 </div>
-                <div class="row">
+                <div class="row row-no-gutters">
                     <div class="col-sm-2 waltz-display-field-label">
-                        Commission:
+                        Commission
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <waltz-from-now ng-if="$ctrl.app.commissionDate"
                                         timestamp="$ctrl.app.commissionDate"
                                         days-only="true">
@@ -218,9 +196,9 @@
                         </span>
                     </div>
                     <div class="col-sm-2 waltz-display-field-label">
-                        Provenance:
+                        Provenance
                     </div>
-                    <div class="col-sm-4">
+                    <div class="col-sm-4 waltz-display-field-value">
                         <span ng-bind="$ctrl.app.provenance">
                             -
                         </span>
@@ -231,22 +209,22 @@
                 <waltz-entity-enum parent-entity-ref="$ctrl.parentEntityRef">
                 </waltz-entity-enum>
 
-                <div class="row">
+                <div class="row row-no-gutters">
                     <div class="col-sm-2 waltz-display-field-label">
                         Description
                     </div>
-                    <div class="col-sm-10">
+                    <div class="col-sm-10 waltz-display-field-value">
                         <waltz-markdown text="$ctrl.app.description">
                         </waltz-markdown>
                     </div>
                 </div>
 
-                <div class="row"
+                <div class="row row-no-gutters"
                      ng-if="$ctrl.appGroups.length > 0">
                     <div class="col-sm-2 waltz-display-field-label">
                         Application Groups
                     </div>
-                    <div class="col-sm-10">
+                    <div class="col-sm-10 waltz-display-field-value">
                         <ul class="list-unstyled list-inline">
                             <li ng-repeat="appGroup in $ctrl.appGroupsToDisplay">
                                 <waltz-entity-link entity-ref="appGroup">
@@ -269,7 +247,7 @@
                 </div>
 
             </div>
-            <div class="col-sm-5">
+            <div class="col-md-5">
                 <!-- Assessment Ratings -->
                 <waltz-assessment-rating-sub-section parent-entity-ref="$ctrl.parentEntityRef">
                 </waltz-assessment-rating-sub-section>
@@ -277,11 +255,16 @@
                 <!-- Key People -->
                 <waltz-key-people-sub-section parent-entity-ref="$ctrl.parentEntityRef">
                 </waltz-key-people-sub-section>
+
+                <br>
+                <!-- Primary Ratings -->
+                <waltz-svelte-component component="$ctrl.PrimaryRatingOverviewSubSection"
+                                        parent-entity-ref="$ctrl.parentEntityRef">
+                </waltz-svelte-component>
             </div>
         </div>
 
 
-        <!--  TEMPLATES -->
         <script type='text/ng-template' id='popup-app-complexity.html'>
             <div>
                 <table class="table small">

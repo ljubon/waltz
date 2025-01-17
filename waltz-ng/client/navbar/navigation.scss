@@ -55,6 +55,10 @@ $hiddenWidth: 8px;
     .sidebar {
         width: $expandedWidth;
     }
+
+    .waltz-svelte-popover {
+        margin-left: $expandedWidth
+    }
 }
 
 .sidebar-collapsed {
@@ -64,6 +68,10 @@ $hiddenWidth: 8px;
 
     .sidebar {
         width: $collapsedWidth;
+    }
+
+    .waltz-svelte-popover {
+        margin-left: $collapsedWidth
     }
 }
 
@@ -75,10 +83,13 @@ $hiddenWidth: 8px;
     .sidebar {
         width: $hiddenWidth;
     }
+
+    .waltz-svelte-popover {
+        margin-left: $hiddenWidth;
+    }
 }
 
 
 .under-header {
     margin-top: 50px;
-    overflow-x: hidden; /* Disable horizontal scroll */
 }

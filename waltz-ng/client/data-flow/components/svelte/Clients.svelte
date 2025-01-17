@@ -11,10 +11,11 @@
         Modes,
         selectedClient
     } from "./flow-decorator-store";
-    import {colors, dimensions} from "./flow-decorator-utils"
+    import {dimensions, getNodeColors} from "./flow-decorator-utils"
     import {truncateMiddle} from "../../../common/string-utils";
 
     import _ from "lodash";
+    import {getSymbol} from "../../../common/svg-icon";
 
     function onMouseEnter(client) {
         $highlightClass = `client_${client.id}`;
@@ -41,9 +42,11 @@
     {#each $displayedClients as client}
         <g transform={`translate(0, ${$clientScale(client.id)})`}
            class={mkClasses(client)}
-           on:click|stopPropagation={() => selectClient(client)}>
-            <rect stroke={colors[client.kind].stroke}
-                  fill={colors[client.kind].fill}
+           role="button"
+           on:click|stopPropagation={() => selectClient(client)}
+           on:keydown|stopPropagation={() => selectClient(client)}>
+            <rect stroke={getNodeColors(client.kind).stroke}
+                  fill={getNodeColors(client.kind).fill}
                   on:mouseenter={() => onMouseEnter(client)}
                   on:mouseleave={() => onMouseLeave()}
                   rx={dimensions.client.height / 2}
@@ -57,21 +60,18 @@
             </text>
             <g class="svg-fa-icon"
                transform={`translate(${$layoutDirection === layoutDirections.clientToCategory
-                    ? dimensions.client.width - dimensions.client.iconPadding + dimensions.client.iconPadding / 4
-                    : dimensions.client.iconPadding / 4}, ${$clientScale.bandwidth() / 2 + 5})`}>
+                    ? dimensions.client.width - dimensions.client.iconPadding + dimensions.client.iconPadding / 2
+                    : dimensions.client.iconPadding / 2}, ${$clientScale.bandwidth() / 2})`}>
                 {#if _.size(client.physicalFlows) === 0}
-                    <text class="svg-fa-icon" font-family="FontAwesome">&#xf29c;</text>
+                    <path d={getSymbol("questionCircle")} fill="none" stroke="#000"></path>
                 {:else if _.size(client.physicalFlows) === 1}
-                    <text class="svg-fa-icon" font-family="FontAwesome">&#xf016;</text>
+                    <path d={getSymbol("page")} fill="none" stroke="#000"></path>
                 {:else if _.size(client.physicalFlows) === 2}
-                    <text class="svg-fa-icon" font-family="FontAwesome">&#xf0c5;</text>
+                    <path d={getSymbol("pages")} fill="none" stroke="#000"></path>
                 {:else}
-                    <text class="svg-fa-icon" font-family="FontAwesome">&#xf115;</text>
+                    <path d={getSymbol("folder")} fill="none" stroke="#000"></path>
                 {/if}
             </g>
-
-<!-- TRANSLATE FOR SWITCH IN DIRECTION!!!! -->
-
         </g>
     {/each}
 </g>

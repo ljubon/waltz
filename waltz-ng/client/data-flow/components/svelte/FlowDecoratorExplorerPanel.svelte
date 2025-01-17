@@ -38,16 +38,14 @@
     import Icon from "../../../common/svelte/Icon.svelte";
     import NoData from "../../../common/svelte/NoData.svelte";
     import {flowClassificationStore} from "../../../svelte-stores/flow-classification-store";
-    import {sameRef} from "../../../common/entity-utils";
+    import {loadSvelteEntity, sameRef} from "../../../common/entity-utils";
 
     export let primaryEntityRef;
 
     let flowGraphSummaryCall = logicalFlowStore.getFlowGraphSummary(primaryEntityRef, null);
     let flowClassificationCall = flowClassificationStore.findAll()
     let physicalFlowCall = physicalFlowStore.findBySelector(mkSelectionOptions(primaryEntityRef, "EXACT"));
-    let entityCall = primaryEntityRef.kind === 'APPLICATION'
-        ? applicationStore.getById(primaryEntityRef.id)
-        : actorStore.getById(primaryEntityRef.id);
+    let entityCall = loadSvelteEntity(primaryEntityRef);
 
     let breadcrumbs = [];
     let additionalBreadcrumbs = [];
@@ -75,8 +73,8 @@
     $: baseBreadcrumb = {
         id: -1,
         name: $flowDirection === flowDirections.INBOUND
-            ? `${$focusClient?.name || entity.name} Inbound flows`
-            : `${$focusClient?.name || entity.name} Outbound flows`,
+            ? `${$focusClient?.name || entity?.name} Inbound flows`
+            : `${$focusClient?.name || entity?.name} Outbound flows`,
         classes: "breadcrumb-root",
         onClick: () => {
             const parent = $focusClient || entity
@@ -87,7 +85,7 @@
 
     $: homeBreadcrumb = {
         id: -2,
-        name: `Home (${entity.name})`,
+        name: `Home (${entity?.name})`,
         classes: "breadcrumb-home",
         onClick: () => {
             $focusClient = null;
@@ -197,7 +195,7 @@
     }
 
 </script>
-
+{#if entity}
 <div class="row">
     <div class="col-md-12">
         <ol class="breadcrumb">
@@ -259,7 +257,8 @@
                  viewBox={`0 0 ${dimensions.diagram.width} ${dimensions.diagram.height}`}
                  width="100%"
                  height="550"
-                 on:click={clearSelections}>
+                 on:click={clearSelections}
+                 on:keydown={clearSelections}>
 
                 <clipPath id="row-clip">
                     <rect x="0"
@@ -298,6 +297,7 @@
         </div>
     </div>
 </div>
+{/if}
 
 <style>
     svg {

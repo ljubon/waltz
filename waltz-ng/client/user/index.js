@@ -37,11 +37,11 @@ export const lastViewedMeasurableCategoryKey = "main.measurable-category.list.la
 export const appLogicalFlowFilterExcludedTagIdsKey = "main.app-view.logical-flow.filter.excludedTagIds";
 export const groupLogicalFlowFilterExcludedTagIdsKey = "main.group-views.logical-flow.filter.excludedTagIds";
 export const favouriteAssessmentDefinitionIdsKey = "main.app-view.assessment-rating.favouriteAssessmentDefnIds";
+export const lastViewedAssessmentInfoTileKey = "main.group-views.assessment-info-tile.lastViewedDefinition";
 export const lastViewedFlowTabKey = "main.app-view.data-flows.lastTab";
 
-export function mkAssessmentDefinitionsIdsKey(entityReference) {
-    checkIsEntityRef(entityReference);
-    return favouriteAssessmentDefinitionIdsKey + _.camelCase(entityReference.kind);
+export function mkAssessmentDefinitionsIdsBaseKey(entityKind) {
+    return `${favouriteAssessmentDefinitionIdsKey}.${_.camelCase(entityKind)}`;
 }
 
 export default () => {

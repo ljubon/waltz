@@ -2,16 +2,20 @@
     import {entitySearchStore} from "../../svelte-stores/entity-search-store";
     import AutoComplete from "simple-svelte-autocomplete";
     import {createEventDispatcher} from "svelte";
+    import _ from "lodash";
+    import EntityLabel from "./EntityLabel.svelte";
 
     export let entityKinds;
     export let placeholder = "Search...";
     export let showClear = true;
+    export let showIcon = true;
+    export let selectionFilter = () => true;
 
     const dispatch = createEventDispatcher();
 
     async function search(qry){
         const response = await entitySearchStore.search(qry, entityKinds);
-        return response.data;
+        return _.filter(response.data, selectionFilter);
     }
 
     let selectedItem = null;
@@ -22,8 +26,19 @@
 
 
 <AutoComplete searchFunction={search}
+              delay="300"
               labelFieldName="name"
               valueFieldName="id"
+              cleanUserText={false}
+              localFiltering={false}
               {placeholder}
               {showClear}
-              bind:selectedItem={selectedItem} />
+              className="waltz-search-input"
+              bind:selectedItem={selectedItem}>
+    <div slot="item"
+         let:item
+         let:label>
+        <EntityLabel {showIcon}
+                     ref={item}/>
+    </div>
+</AutoComplete>

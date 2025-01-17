@@ -3,15 +3,16 @@
 
     export let actions = []; // { name: "", icon: "", handleAction: (ctx) => {}, description?: "" }
     export let ctx = null;
+
 </script>
 
 
 <ul class="list-inline">
     {#each actions as action}
         <li class="clickable"
-            title="{action.description}"
-            on:click={() => action.handleAction(ctx)}>
-            <button class="btn btn-skinny">
+            title="{action.description}">
+            <button class="btn btn-skinny"
+                    on:click={() => action.handleAction(ctx)}>
                 {#if action.icon}<Icon name={action.icon}/>{/if}
                 {#if action.name}{action.name}{/if}
             </button>

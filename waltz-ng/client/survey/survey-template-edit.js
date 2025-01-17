@@ -22,6 +22,7 @@ import template from "./survey-template-edit.html";
 import {displayError} from "../common/error-utils";
 import {CORE_API} from "../common/services/core-api-utils";
 import toasts from "../svelte-stores/toast-store";
+import {surveyQuestionFieldType} from "../common/services/enums/survey-question-field-type";
 
 /*
     Note: this list of functions/operators is derived from the capabilities of BigEval and the extension methods
@@ -42,50 +43,28 @@ See the documentation for a complete list of functions and their arguments.  Bel
 * \`dataTypeUsages(name|extId)\`: returns set of usage kinds for the given data types (use the \`=~\` operator to test for membership)
 * \`isRetiring()\`: (application only) true if app has planned retirement date but no actual retirement date
 * \`hasDataType(name|extId)\`: returns whether the specified datatype (or a descendent) is in use by the app
-* \`hasInvolvement(roleName)\`: returns whether the subject entity has any involvment record with the given role name
+* \`hasInvolvement(roleName)\`: returns whether the subject entity has any involvement record with the given role name
+* \`hasLifecyclePhase(lifecyclePhase)\`: returns true of the given lifecycle phase matches the entities lifecycles phase. (PRODUCTION, DEVELOPMENT, CONCEPTUAL, RETIRED)
+* \`isAppKind(applicationKind)\`: returns true of the given app kind phase matches the application kind. ( IN&#95;HOUSE, INTERNALLY&#95;HOSTED, EXTERNALLY&#95;HOSTED, EUC, THIRD&#95;PARTY, CUSTOMISED, EXTERNAL)
+
+See the <a href="https://commons.apache.org/proper/commons-jexl/reference/syntax.html" target="_blank">JEXL documentation</a>.
 `;
 
 
 const initialState = {
     editingQuestion: false,
-    questionFieldTypes: [{
-        name: "Text",
-        value: "TEXT"
-    },{
-        name: "Text Area",
-        value: "TEXTAREA"
-    },{
-        name: "Number",
-        value: "NUMBER"
-    },{
-        name: "Boolean",
-        value: "BOOLEAN"
-    },{
-        name: "Date",
-        value: "DATE"
-    },{
-        name: "Dropdown",
-        value: "DROPDOWN"
-    },{
-        name: "Dropdown (Multi-Select)",
-        value: "DROPDOWN_MULTI_SELECT"
-    },{
-        name: "Measurable tree (Multi-Select)",
-        value: "MEASURABLE_MULTI_SELECT"
-    },{
-        name: "Application",
-        value: "APPLICATION"
-    },{
-        name: "Person",
-        value: "PERSON"
-    }],
+    questionFieldTypes: _
+        .chain(_.values(surveyQuestionFieldType))
+        .orderBy([d => d.position, d => d.name])
+        .map(d => ({name: d.name, value: d.key}))
+        .value(),
     selectedQuestionInfo: {},
     surveyQuestions: [],
     surveyTemplate: {},
     targetEntityKinds: [{
         name: "Application",
         value: "APPLICATION"
-    },{
+    }, {
         name: "Change Initiative",
         value: "CHANGE_INITIATIVE"
     }],
@@ -130,7 +109,8 @@ function controller($q,
                     name: vm.surveyTemplate.name,
                     description: vm.surveyTemplate.description,
                     targetEntityKind: vm.surveyTemplate.targetEntityKind,
-                    externalId: vm.surveyTemplate.externalId
+                    externalId: vm.surveyTemplate.externalId,
+                    issuanceRole: vm.surveyTemplate.issuanceRole
                 }])
             .then(() => toasts.success("Survey template updated successfully"));
     };
@@ -172,6 +152,12 @@ function controller($q,
         vm.editingQuestion = false;
         vm.selectedQuestionInfo = null;
     };
+
+    vm.onChangeQFieldType = () => {
+        if(vm.selectedQuestionInfo.question.fieldType !== 'MEASURABLE_MULTI_SELECT') {
+            delete vm.selectedQuestionInfo.question.qualifierEntity;
+        }
+    }
 
     vm.createQuestion = (qi) => {
 

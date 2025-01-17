@@ -40,6 +40,7 @@ public class LoadAll {
             new AppGroupEntryGenerator(),
             new BookmarkGenerator(),
             new ChangeInitiativeGenerator(),
+            new ComplexityGenerator(),
             new ProcessGenerator(),
             new MeasurableGenerator("PRODUCT"),
             new MeasurableGenerator("CAPABILITY"),
@@ -65,7 +66,8 @@ public class LoadAll {
             new SurveyRunGenerator(),
             new ChangeSetGenerator(),
             new LicenceGenerator(),
-            new ChangeUnitGenerator()
+            new ChangeUnitGenerator(),
+            new LegalEntityGenerator()
     };
 
 

@@ -44,35 +44,44 @@
 
     const tableHeaders = [
         {
-            class: "awaiting-approval",
+            cellClass: "overdue",
+            name: "Approval Overdue",
+            longName: "Approval overdue - surveys past their approval due date",
+            description: "Survey is past its approval due date within Waltz",
+            width: "20%",
+            data: d => d.approvalOverdue
+        }, {
+            cellClass: "awaiting-approval",
             name: "Awaiting Approval",
             longName: "Completed surveys - awaiting approval",
             description: "Completed and submitted surveys waiting approval by a survey owner",
             width: "20%",
             data: d => d.completed
-        },{
-            class: "overdue",
-            name: "Overdue",
-            longName: "Overdue surveys",
-            description: "Survey is past its submission due date within Waltz", // check approval or submission due date
+        }, {
+            cellClass: "overdue",
+            name: "Submission Overdue",
+            longName: "Surveys for your approval which have not yet been submitted and are overdue",
+            description: "Survey is past its submission due date within Waltz",
             width: "20%",
-            data: d => d.overdue
-        },{
-            class: "awaiting-completion",
-            name: "Awaiting Completion",
+            data: d => d.submissionOverdue
+        }, {
+            cellClass: "awaiting-completion",
+            name: "Awaiting Submission",
             longName: "Incomplete surveys - awaiting completion",
             description: "Surveys that will need approval once they have been submitted, this includes overdue surveys and those that have not passed their due date",
             width: "20%",
             data: d => d.incomplete
-        },{
-            class: "rejected",
+        }, {
+            cellClass: "rejected",
+            headerClass: "secondary",
             name: "Rejected",
             longName: "Rejected surveys",
             description: "Survey owner has rejected survey. Survey must be reopened then recipients are required to update and resubmit",
             width: "20%",
             data: d => d.rejected
-        },{
-            class: "approved",
+        }, {
+            cellClass: "approved",
+            headerClass: "secondary",
             longName: "Approved surveys",
             description: "Survey has been approved by the survey owner, no further action required",
             name: "Approved",
@@ -128,7 +137,8 @@
             const approved = _.get(surveysByStatus, ["APPROVED"], [])
             const rejected = _.get(surveysByStatus, ["REJECTED"], [])
 
-            const [overdue, outstanding] = _.partition(incomplete, d => new Date(d.surveyRun.dueDate) < currentDate);
+            const submissionOverdue = _.filter(incomplete, d => new Date(d.surveyInstance.dueDate) < currentDate);
+            const approvalOverdue = _.filter(completed, d => new Date(d.surveyInstance.approvalDueDate) < currentDate);
 
             return {
                 template: templatesById[k],
@@ -136,7 +146,8 @@
                 approved,
                 rejected,
                 completed,
-                overdue,
+                submissionOverdue,
+                approvalOverdue
             }})
         .orderBy(d => d.template.name)
         .value();
@@ -169,9 +180,13 @@
     <table class="table table-condensed">
         <thead>
         <tr>
-            <th width="30%">Survey Name</th>
+            <th width="30%"
+                style="text-align: left">
+                Survey Name
+            </th>
             {#each tableHeaders as header}
                 <th width={`${70 / tableHeaders.length}%`}
+                    class={header.headerClass}
                     title={header.description}>
                     {header.name}
                 </th>
@@ -183,7 +198,7 @@
             <tr>
                 <td>{templateInfo.template.name}</td>
                 {#each tableHeaders as header}
-                    <td class={_.isEmpty(header.data(templateInfo)) ? "" : header.class}
+                    <td class={_.isEmpty(header.data(templateInfo)) ? "" : header.cellClass}
                         class:selected={$selectedSurveyStatusCell?.header === header && $selectedSurveyStatusCell?.templateInfo === templateInfo}>
                         {#if _.isEmpty(header.data(templateInfo))}
                             <div class="text-muted">0</div>
@@ -197,6 +212,15 @@
                 {/each}
             </tr>
         {/each}
+        <tr class="total-row">
+            <td>Total</td>
+            <td>
+                <span>{_.sumBy(templateSummaries, d => _.size(d.completed))}
+                </span>
+            </td>
+            <td colspan="3">
+            </td>
+        </tr>
         </tbody>
     </table>
 
@@ -313,6 +337,15 @@
 
     th {
         text-align: center;
+    }
+
+    th.secondary {
+        color: #777;
+    }
+
+    .total-row {
+        color: #777;
+        font-weight: bold
     }
 
 </style>

@@ -25,7 +25,7 @@ import {resolveResponses} from "../../../common/promise-utils";
 
 
 const bindings = {
-    parentEntityRef: "<"
+    parentEntityRef: "<?"
 };
 
 const initialState = {
@@ -39,8 +39,8 @@ function controller($q, serviceBroker) {
     const loadAll = () => {
         const definitionsPromise = serviceBroker
             .loadViewData(
-                CORE_API.AssessmentDefinitionStore.findByKind,
-                [vm.parentEntityRef.kind]);
+                CORE_API.AssessmentDefinitionStore.findByEntityReference,
+                [vm.parentEntityRef]);
 
         const ratingsPromise = serviceBroker
             .loadViewData(
@@ -72,9 +72,11 @@ function controller($q, serviceBroker) {
     };
 
 
-    vm.$onInit = () => {
-        loadAll();
-        vm.useExternalEditorPage = _.includes(["CHANGE_UNIT"], vm.parentEntityRef.kind);
+    vm.$onChanges = () => {
+        if (vm.parentEntityRef) {
+            loadAll();
+            vm.useExternalEditorPage = _.includes(["CHANGE_UNIT"], vm.parentEntityRef.kind);
+        }
     };
 
 

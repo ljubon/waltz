@@ -18,31 +18,43 @@
 
 package org.finos.waltz.data.changelog;
 
-import org.finos.waltz.schema.tables.AttestationInstance;
-import org.finos.waltz.schema.tables.records.ChangeLogRecord;
-import org.finos.waltz.model.*;
+import org.finos.waltz.model.EntityKind;
+import org.finos.waltz.model.EntityReference;
+import org.finos.waltz.model.ImmutableEntityReference;
+import org.finos.waltz.model.Operation;
+import org.finos.waltz.model.Severity;
 import org.finos.waltz.model.changelog.ChangeLog;
 import org.finos.waltz.model.changelog.ImmutableChangeLog;
 import org.finos.waltz.model.tally.OrderedTally;
 import org.finos.waltz.model.tally.Tally;
-import org.jooq.*;
+import org.finos.waltz.schema.tables.AttestationInstance;
+import org.finos.waltz.schema.tables.records.ChangeLogRecord;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Query;
+import org.jooq.Record;
+import org.jooq.Record4;
+import org.jooq.RecordMapper;
+import org.jooq.SelectConditionStep;
+import org.jooq.SelectOrderByStep;
+import org.jooq.Table;
 import org.jooq.impl.DSL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.Collection;
-import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
-import static org.finos.waltz.schema.Tables.PERSON;
-import static org.finos.waltz.schema.tables.ChangeLog.CHANGE_LOG;
 import static org.finos.waltz.common.Checks.checkNotEmpty;
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.common.DateTimeUtilities.nowUtc;
 import static org.finos.waltz.data.JooqUtilities.*;
+import static org.finos.waltz.schema.Tables.PERSON;
+import static org.finos.waltz.schema.tables.ChangeLog.CHANGE_LOG;
 
 
 @Repository
@@ -64,6 +76,7 @@ public class ChangeLogDao {
                 .severity(Severity.valueOf(record.getSeverity()))
                 .parentReference(parentRef)
                 .childKind(Optional.ofNullable(record.getChildKind()).map(EntityKind::valueOf))
+                .childId(Optional.ofNullable(record.getChildId()))
                 .operation(Operation.valueOf(record.getOperation()))
                 .createdAt(record.getCreatedAt().toLocalDateTime())
                 .build();
@@ -116,13 +129,14 @@ public class ChangeLogDao {
 
 
     public List<ChangeLog> findByParentReference(EntityReference ref,
-                                                 Optional<Date> date,
+                                                 Optional<java.util.Date> date,
                                                  Optional<Integer> limit) {
         checkNotNull(ref, "ref must not be null");
 
         Condition dateCondition = date
                 .map(d -> mkDateRangeCondition(CHANGE_LOG.CREATED_AT, d))
                 .orElse(DSL.trueCondition());
+
         Integer limitValue = limit.orElse(Integer.MAX_VALUE);
 
         return dsl.select()
@@ -137,13 +151,69 @@ public class ChangeLogDao {
 
 
     public List<ChangeLog> findByPersonReference(EntityReference ref,
-                                                 Optional<Date> date,
+                                                 Optional<java.util.Date> date,
                                                  Optional<Integer> limit) {
         checkNotNull(ref, "ref must not be null");
 
         Condition dateCondition = date
                 .map(d -> mkDateRangeCondition(CHANGE_LOG.CREATED_AT, d))
                 .orElse(DSL.trueCondition());
+
+        Integer limitValue = limit.orElse(Integer.MAX_VALUE);
+
+        SelectConditionStep<Record> byParentRef = DSL
+                .select(CHANGE_LOG.fields())
+                .from(CHANGE_LOG)
+                .where(CHANGE_LOG.PARENT_ID.eq(ref.id()))
+                .and(dateCondition)
+                .and(CHANGE_LOG.PARENT_KIND.eq(ref.kind().name()));
+
+        SelectConditionStep<Record> byUserId = DSL
+                .select(CHANGE_LOG.fields())
+                .from(CHANGE_LOG)
+                .innerJoin(PERSON).on(PERSON.EMAIL.eq(CHANGE_LOG.USER_ID))
+                .where(PERSON.ID.eq(ref.id()))
+                .and(dateCondition);
+
+        SelectOrderByStep<Record> union = byParentRef.unionAll(byUserId);
+
+        return dsl
+                .select(union.fields())
+                .from(union.asTable())
+                .orderBy(union.field("created_at").desc())
+                .limit(limitValue)
+                .fetch(TO_DOMAIN_MAPPER);
+    }
+
+
+    public List<ChangeLog> findByParentReferenceForDateRange(EntityReference ref,
+                                                             Date startDate,
+                                                             Date endDate,
+                                                             Optional<Integer> limit) {
+        checkNotNull(ref, "ref must not be null");
+
+        Condition dateCondition = mkDateRangeCondition(CHANGE_LOG.CREATED_AT, startDate, endDate);
+
+        Integer limitValue = limit.orElse(Integer.MAX_VALUE);
+
+        return dsl.select()
+                .from(CHANGE_LOG)
+                .where(CHANGE_LOG.PARENT_ID.eq(ref.id()))
+                .and(CHANGE_LOG.PARENT_KIND.eq(ref.kind().name()))
+                .and(dateCondition)
+                .orderBy(CHANGE_LOG.CREATED_AT.desc())
+                .limit(limitValue)
+                .fetch(TO_DOMAIN_MAPPER);
+    }
+
+
+    public List<ChangeLog> findByPersonReferenceForDateRange(EntityReference ref,
+                                                             Date startDate,
+                                                             Date endDate,
+                                                             Optional<Integer> limit) {
+        checkNotNull(ref, "ref must not be null");
+
+        Condition dateCondition = mkDateRangeCondition(CHANGE_LOG.CREATED_AT, startDate, endDate);
 
         Integer limitValue = limit.orElse(Integer.MAX_VALUE);
 
@@ -234,16 +304,19 @@ public class ChangeLogDao {
     }
 
 
-    public int write(ChangeLog changeLog) {
+    public int write(Optional<DSLContext> tx, ChangeLog changeLog) {
         checkNotNull(changeLog, "changeLog must not be null");
+        DSLContext dslContext = tx.orElse(dsl);
 
-        return dsl.insertInto(CHANGE_LOG)
+        return dslContext
+                .insertInto(CHANGE_LOG)
                 .set(CHANGE_LOG.MESSAGE, changeLog.message())
                 .set(CHANGE_LOG.PARENT_ID, changeLog.parentReference().id())
                 .set(CHANGE_LOG.PARENT_KIND, changeLog.parentReference().kind().name())
                 .set(CHANGE_LOG.USER_ID, changeLog.userId())
                 .set(CHANGE_LOG.SEVERITY, changeLog.severity().name())
-                .set(CHANGE_LOG.CHILD_KIND, changeLog.childKind().map(ck -> ck.name()).orElse(null))
+                .set(CHANGE_LOG.CHILD_KIND, changeLog.childKind().map(Enum::name).orElse(null))
+                .set(CHANGE_LOG.CHILD_ID, changeLog.childId().orElse(null))
                 .set(CHANGE_LOG.OPERATION, changeLog.operation().name())
                 .set(CHANGE_LOG.CREATED_AT, Timestamp.valueOf(changeLog.createdAt()))
                 .execute();
@@ -261,11 +334,14 @@ public class ChangeLogDao {
                         .set(CHANGE_LOG.PARENT_KIND, changeLog.parentReference().kind().name())
                         .set(CHANGE_LOG.USER_ID, changeLog.userId())
                         .set(CHANGE_LOG.SEVERITY, changeLog.severity().name())
-                        .set(CHANGE_LOG.CHILD_KIND, changeLog.childKind().map(ck -> ck.name()).orElse(null))
+                        .set(CHANGE_LOG.CHILD_KIND, changeLog.childKind().map(Enum::name).orElse(null))
+                        .set(CHANGE_LOG.CHILD_ID, changeLog.childId().orElse(null))
                         .set(CHANGE_LOG.OPERATION, changeLog.operation().name())
                         .set(CHANGE_LOG.CREATED_AT, Timestamp.valueOf(changeLog.createdAt())))
                 .toArray(Query[]::new);
-        return dsl.batch(queries).execute();
+        return dsl
+                .batch(queries)
+                .execute();
     }
 
 

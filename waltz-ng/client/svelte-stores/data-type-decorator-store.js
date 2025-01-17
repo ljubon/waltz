@@ -18,6 +18,7 @@
 
 import {remote} from "./remote";
 import {entity} from "../common/services/enums/entity";
+import {checkIsEntityRef} from "../common/checks";
 
 export function mkDataTypeDecoratorStore() {
 
@@ -30,6 +31,16 @@ export function mkDataTypeDecoratorStore() {
             [],
             {force})
     };
+
+    // ONLY FOR LOGICAL FLOWS
+    const findDataTypeRatingCharacteristics = (cmd, force = false) => {
+        return remote.fetchViewData(
+            "POST",
+            "api/data-type-decorator/rating-characteristics",
+            cmd,
+            [],
+            {force})
+    }
 
     const findDatatypeUsageCharacteristics = (ref, force = false) => remote
         .fetchViewData(
@@ -48,10 +59,28 @@ export function mkDataTypeDecoratorStore() {
             null,
             {force});
 
+
+    const getViewForParentRef = (ref, force = false) => remote
+        .fetchViewData(
+            "GET",
+            `api/data-type-decorator/entity/${ref.kind}/${ref.id}/view`,
+            null,
+            null,
+            {force});
+
+
+    const save = (ref, command) => remote
+        .execute("POST",
+                 `api/data-type-decorator/save/entity/${ref.kind}/${ref.id}`,
+                 command);
+
     return {
         findByFlowIds,
         findDatatypeUsageCharacteristics,
-        findBySelector
+        findBySelector,
+        findDataTypeRatingCharacteristics,
+        getViewForParentRef,
+        save
     };
 }
 

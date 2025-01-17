@@ -1,4 +1,5 @@
 <!-- Header -->
+<div ng-if="!$ctrl.oauthDisableAnonymous || (isAuthenticated())">
 <div ui-view="header">
 </div>
 
@@ -9,14 +10,29 @@
         'sidebar-hidden': !$ctrl.isVisible}">
     <!-- Content -->
     <aside class="sidebar">
-       <waltz-svelte-component component="$ctrl.Sidebar"></waltz-svelte-component>
+        <waltz-svelte-component component="$ctrl.Sidebar"></waltz-svelte-component>
     </aside>
 
     <aside class="notifications">
-       <waltz-svelte-component component="$ctrl.Toasts"></waltz-svelte-component>
+        <waltz-svelte-component component="$ctrl.Toasts"></waltz-svelte-component>
+    </aside>
+
+    <aside class="waltz-svelte-popover">
+        <waltz-svelte-component component="$ctrl.Popover"></waltz-svelte-component>
     </aside>
 
     <main ui-view="content"
           class="main">
     </main>
+</div>
+</div>
+<div ng-if="($ctrl.oauthDisableAnonymous === true)  && ((!isAuthenticated() && !isAuthFailed))">
+    <h2>Authenticating user...</h2>
+    <h3>
+        <span ng-bind="ctrl.oauthDisableAnonymous"> </span>
+    </h3>
+</div>
+<div ng-if="($ctrl.oauthDisableAnonymous === true) && ((!isAuthenticated() && isAuthFailed))">
+    <h2>Authentication Failed</h2>
+    <h3>Contact your Waltz System Administrator for more information</h3>
 </div>

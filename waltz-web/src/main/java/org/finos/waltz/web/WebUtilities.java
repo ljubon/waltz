@@ -18,18 +18,13 @@
 
 package org.finos.waltz.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.fasterxml.jackson.datatype.jsr310.JSR310Module;
-import org.finos.waltz.service.user.UserRoleService;
-import org.finos.waltz.web.endpoints.auth.AuthenticationUtilities;
-import org.eclipse.jetty.http.MimeTypes;
 import org.finos.waltz.common.EnumUtilities;
 import org.finos.waltz.common.SetUtilities;
 import org.finos.waltz.common.StringUtilities;
 import org.finos.waltz.model.*;
 import org.finos.waltz.model.user.SystemRole;
+import org.finos.waltz.service.user.UserRoleService;
+import org.finos.waltz.web.endpoints.auth.AuthenticationUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -37,42 +32,30 @@ import spark.Response;
 import spark.ResponseTransformer;
 
 import java.io.IOException;
+import java.net.URLConnection;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static org.finos.waltz.service.user.RoleUtilities.getRequiredRoleForEntityKind;
 import static java.util.stream.Collectors.toList;
 import static org.finos.waltz.common.Checks.checkNotNull;
+import static org.finos.waltz.common.JacksonUtilities.getJsonMapper;
 import static org.finos.waltz.common.ObjectUtilities.firstNotNull;
 import static org.finos.waltz.common.SetUtilities.asSet;
 import static org.finos.waltz.model.EntityReference.mkRef;
+import static org.finos.waltz.model.RoleUtilities.getRequiredRoleForEntityKind;
 
 public class WebUtilities {
-
 
     private static final Logger LOG = LoggerFactory.getLogger(WebUtilities.class);
 
     public static final String TYPE_JSON = "application/json";
-
-    private static final MimeTypes mimeTypes = new MimeTypes();
-    private static final ObjectMapper mapper;
-
-    static {
-        mapper = new ObjectMapper();
-        mapper.registerModule(new JSR310Module()); // DateTime etc
-        mapper.registerModule(new Jdk8Module()); // Optional etc
-
-        // Force timestamps to be sent as ISO-8601 formatted strings
-        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-
-        mimeTypes.addMimeMapping("ttf", "application/x-font-ttf");
-    }
-
-
-    public static final ResponseTransformer transformer = mapper::writeValueAsString;
+    public static final ResponseTransformer transformer = getJsonMapper()::writeValueAsString;
 
 
     /**
@@ -112,6 +95,15 @@ public class WebUtilities {
         checkNotNull(paramName, "paramName must not be null");
 
         return Long.parseLong(request.params(paramName));
+    }
+
+
+    public static int getInt(Request request,
+                             String paramName) {
+        checkNotNull(request, "request must not be null");
+        checkNotNull(paramName, "paramName must not be null");
+
+        return Integer.parseInt(request.params(paramName));
     }
 
 
@@ -239,7 +231,7 @@ public class WebUtilities {
      */
     public static <T> T readBody(Request request,
                                  Class<T> objClass) throws IOException {
-        return mapper.readValue(
+        return getJsonMapper().readValue(
                 request.bodyAsBytes(),
                 objClass);
     }
@@ -252,9 +244,9 @@ public class WebUtilities {
 
 
     public static List<Long> readIdsFromBody(Request req) throws IOException {
-        List list = readBody(req, List.class);
+        List<?> list = readBody(req, List.class);
 
-        return (List<Long>) list
+        return list
                 .stream()
                 .map(l -> Long.parseLong(l.toString()))
                 .collect(Collectors.toList());
@@ -341,8 +333,10 @@ public class WebUtilities {
      * @return
      */
     public static String getMimeType(String path) {
+
         return firstNotNull(
-                mimeTypes.getMimeByExtension(path),
+                path.endsWith("ttf") ? "application/x-font-ttf" : null,
+                URLConnection.guessContentTypeFromName(path),
                 "application/octet-stream");
     }
 
@@ -351,11 +345,11 @@ public class WebUtilities {
         String limitVal = request.queryParams("limit");
         return Optional
                 .ofNullable(limitVal)
-                .map(s -> Integer.valueOf(s));
+                .map(Integer::valueOf);
     }
 
 
-    public static Optional<Date> getDateParam(Request request) {
+    public static Optional<java.util.Date> getDateParam(Request request) {
         String dateVal = request.queryParams("date");
         return Optional
                 .ofNullable(dateVal)
@@ -363,6 +357,22 @@ public class WebUtilities {
                     try {
                         return new SimpleDateFormat("yyyy-MM-dd").parse(s);
                     } catch (ParseException pe) {
+                        LOG.warn("Could not parse date: " + s);
+                        return null;
+                    }
+                });
+
+    }
+
+    public static Optional<LocalDate> getLocalDateParam(Request request, String paramName) {
+        String dateVal = request.params(paramName);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        return Optional
+                .ofNullable(dateVal)
+                .map(s -> {
+                    try {
+                        return LocalDate.parse(s, formatter);
+                    } catch (DateTimeParseException pe) {
                         LOG.warn("Could not parse date: " + s);
                         return null;
                     }

@@ -19,9 +19,10 @@
 <div class="container-fluid">
 
     <!-- HEADER -->
-    <waltz-page-header name="{{ ctrl.specification.name }}"
+    <waltz-page-header name="{{ ctrl.physicalFlow.name || ctrl.specification.name }}"
                        small="{{ ctrl.logicalFlow.source.name }} {{ ctrl.logicalFlow ? '&rarr;' : '' }} {{ ctrl.logicalFlow.target.name }}"
-                       icon="qrcode">
+                       icon="{{ctrl.physicalFlow.kind | toIconName:'entity'}}"
+                       class="waltz-visibility-parent">
         <breadcrumbs>
             <ol class="waltz-breadcrumbs">
                 <li><a ui-sref="main">Home</a></li>
@@ -35,18 +36,25 @@
                     </waltz-entity-link>
                 </li>
                 <li ng-if="!ctrl.logicalFlow">physical Flow</li>
-                <li ng-bind="ctrl.specification.name | truncateMiddle:50"></li>
+                <li ng-bind="(ctrl.physicalFlow.name || ctrl.specification.name) | truncateMiddle:50"></li>
             </ol>
         </breadcrumbs>
+        <actions>
+            <button ng-click="ctrl.sharePageLink()"
+                    title="Copy url to clipboard"
+                    class="btn btn-skinny waltz-visibility-child-30">
+                <waltz-icon name="share-alt"></waltz-icon>
+            </button>
+        </actions>
     </waltz-page-header>
 
 
     <div class="waltz-page-summary waltz-page-summary-attach">
         <div ng-if="ctrl.logicalFlow">
             <waltz-section-actions ng-if="ctrl.physicalFlow.entityLifecycleStatus !== 'REMOVED'">
-                <div waltz-has-role="LOGICAL_DATA_FLOW_EDITOR">
+                <div ng-if="ctrl.canEdit">
                     <button class="btn btn-xs btn-danger"
-                            ng-disabled="! (ctrl.mentions | isEmpty)"
+                            ng-disabled="! (ctrl.mentions | isEmpty) || ctrl.physicalFlow.isReadOnly"
                             ng-click="(ctrl.mentions | isEmpty) && ctrl.deleteFlow()">
                         Delete
                     </button>
@@ -293,10 +301,16 @@
 
             </div>
             <div class="waltz-sub-section-controls">
-                <span waltz-has-role="LOGICAL_DATA_FLOW_EDITOR" >
+                <span ng-if="ctrl.canEdit">
+                    <span>|</span>
+
                     <a ng-click="ctrl.visibility.overviewEditor = true"
                        ng-if="! ctrl.visibility.overviewEditor"
                        class="clickable">
+                        <span ng-if="ctrl.physicalFlow.isReadOnly"
+                              title="The flow is locked, only limited fields will be editable">
+                            <waltz-icon name="unlock-alt"></waltz-icon>
+                        </span>
                         Edit
                     </a>
 
@@ -306,7 +320,6 @@
                         Done
                     </a>
                 </span>
-                <span>|</span>
                 <span>
                     <waltz-entity-link entity-ref="{
                         kind: 'LOGICAL_DATA_FLOW',

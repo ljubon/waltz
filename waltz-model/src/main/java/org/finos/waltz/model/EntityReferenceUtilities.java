@@ -18,9 +18,13 @@
 
 package org.finos.waltz.model;
 
-/**
- * Created by dwatkins on 06/06/2017.
- */
+import java.util.Collection;
+import java.util.Map;
+import java.util.Optional;
+
+import static org.finos.waltz.common.MapUtilities.indexBy;
+
+
 public class EntityReferenceUtilities {
 
     public static String pretty(EntityReference ref) {
@@ -40,4 +44,20 @@ public class EntityReferenceUtilities {
                 .orElse(idStr);
     }
 
+
+    public static boolean sameRef(Optional<EntityReference> refA, EntityReference refB) {
+        if (refB == null) {
+            return false;
+        }
+        return refA
+                .map(refB::equals)
+                .orElse(false);
+    }
+
+
+    public static Map<Long, EntityReference> indexById(Collection<EntityReference> refs) {
+        return indexBy(
+                refs,
+                EntityReference::id);
+    }
 }

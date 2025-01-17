@@ -21,29 +21,43 @@ package org.finos.waltz.model.report_grid;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.finos.waltz.model.CommentProvider;
-import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.Nullable;
 import org.immutables.value.Value;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Set;
+
+import static org.finos.waltz.common.SetUtilities.asSet;
 
 @Value.Immutable
 @JsonSerialize(as = ImmutableReportGridCell.class)
 @JsonDeserialize(as = ImmutableReportGridCell.class)
 public abstract class ReportGridCell implements CommentProvider {
 
-    public abstract EntityKind columnEntityKind();  // x
-    public abstract long columnEntityId();  // x
+    public abstract Long columnDefinitionId();
 
-    public abstract long applicationId(); // y
 
-    @Nullable
-    public abstract Long ratingId();
+    public abstract long subjectId(); // y
 
-    @Nullable
-    public abstract BigDecimal value();
+
+    public abstract Set<Long> ratingIdValues();
 
     @Nullable
-    public abstract String text();
+    public abstract BigDecimal numberValue();
 
+
+    @Nullable
+    public abstract String textValue();
+
+    @Nullable
+    public abstract String errorValue();
+
+    @Nullable
+    public abstract LocalDateTime dateTimeValue();
+
+    @Value.Default
+    public Set<CellOption> options() {
+        return asSet(CellOption.defaultCellOption());
+    }
 }

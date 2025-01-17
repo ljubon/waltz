@@ -21,14 +21,15 @@ package org.finos.waltz.data.change_initiative;
 import org.finos.waltz.data.SelectorUtilities;
 import org.finos.waltz.data.entity_hierarchy.AbstractIdSelectorFactory;
 import org.finos.waltz.data.orgunit.OrganisationalUnitIdSelectorFactory;
-import org.finos.waltz.model.EntityKind;
-import org.finos.waltz.model.EntityReference;
-import org.finos.waltz.model.IdSelectionOptions;
+import org.finos.waltz.model.*;
+import org.finos.waltz.model.application.LifecyclePhase;
+import org.finos.waltz.schema.tables.EntityHierarchy;
 import org.jooq.Record1;
 import org.jooq.Select;
 import org.jooq.SelectConditionStep;
 import org.jooq.impl.DSL;
 
+import static org.finos.waltz.schema.Tables.ENTITY_HIERARCHY;
 import static org.finos.waltz.schema.tables.ChangeInitiative.CHANGE_INITIATIVE;
 import static org.finos.waltz.schema.tables.EntityRelationship.ENTITY_RELATIONSHIP;
 import static org.finos.waltz.schema.tables.FlowDiagramEntity.FLOW_DIAGRAM_ENTITY;
@@ -48,12 +49,15 @@ public class ChangeInitiativeIdSelectorFactory extends AbstractIdSelectorFactory
     @Override
     protected Select<Record1<Long>> mkForOptions(IdSelectionOptions options) {
         switch (options.entityReference().kind()) {
+            case ALL:
+                return mkForAll(options);
             case ACTOR:
-            case APP_GROUP:
             case APPLICATION:
             case MEASURABLE:
             case SCENARIO:
                 return mkForRef(options);
+            case APP_GROUP:
+                return mkForAppGroup(options);
             case PERSON:
                 return mkForPerson(options);
             case CHANGE_INITIATIVE:
@@ -99,16 +103,35 @@ public class ChangeInitiativeIdSelectorFactory extends AbstractIdSelectorFactory
     private Select<Record1<Long>> mkForOrgUnit(IdSelectionOptions options) {
         Select<Record1<Long>> ouSelector = organisationalUnitIdSelectorFactory.apply(options);
 
-        return DSL
-                .selectDistinct(CHANGE_INITIATIVE.ID)
-                .from(CHANGE_INITIATIVE)
-                .where(CHANGE_INITIATIVE.ORGANISATIONAL_UNIT_ID.in(ouSelector));
+        EntityHierarchy ciHierarchy = ENTITY_HIERARCHY.as("ciHierarchy");
+
+        if (options.scope() == HierarchyQueryScope.EXACT) {
+            return DSL
+                    .selectDistinct(CHANGE_INITIATIVE.ID)
+                    .from(CHANGE_INITIATIVE)
+                    .where(CHANGE_INITIATIVE.ORGANISATIONAL_UNIT_ID.in(ouSelector));
+        } else {
+            return DSL
+                    .selectDistinct(ciHierarchy.ID)
+                    .from(ciHierarchy)
+                    .innerJoin(CHANGE_INITIATIVE).on(CHANGE_INITIATIVE.ID.eq(ciHierarchy.ANCESTOR_ID)
+                            .and(ciHierarchy.KIND.eq(EntityKind.CHANGE_INITIATIVE.name())))
+                    .where(CHANGE_INITIATIVE.ORGANISATIONAL_UNIT_ID.in(ouSelector));
+        }
     }
 
 
     private Select<Record1<Long>> mkForChangeInitiative(IdSelectionOptions options) {
         SelectorUtilities.ensureScopeIsExact(options);
         return DSL.select(DSL.val(options.entityReference().id()));
+    }
+
+
+    private Select<Record1<Long>> mkForAll(IdSelectionOptions options) {
+        return DSL
+                .select(CHANGE_INITIATIVE.ID)
+                .from(CHANGE_INITIATIVE)
+                .where(CHANGE_INITIATIVE.LIFECYCLE_PHASE.ne(LifecyclePhase.RETIRED.name()));
     }
 
 
@@ -130,6 +153,19 @@ public class ChangeInitiativeIdSelectorFactory extends AbstractIdSelectorFactory
                 .and(ENTITY_RELATIONSHIP.ID_A.eq(ref.id()));
 
         return DSL.selectFrom(aToB.union(bToA).asTable());
+    }
+
+
+    private Select<Record1<Long>> mkForAppGroup(IdSelectionOptions options) {
+
+        Select<Record1<Long>> directlyRelatedCis = mkForRef(options);
+
+        ImmutableIdSelectionOptions hierarchySelector = ImmutableIdSelectionOptions.copyOf(options)
+                .withScope(HierarchyQueryScope.CHILDREN);
+
+        Select<Record1<Long>> indirectlyRelatedCis = mkForOrgUnit(hierarchySelector);
+
+        return DSL.selectFrom(directlyRelatedCis.union(indirectlyRelatedCis).asTable());
     }
 
 }

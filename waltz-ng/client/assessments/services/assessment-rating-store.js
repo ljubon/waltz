@@ -30,6 +30,13 @@ export function store($http, BaseApiUrl) {
             .then(d => d.data);
     };
 
+    const getRatingPermissions = (ref, definitionId) => {
+        checkIsEntityRef(ref);
+        return $http
+            .get(`${BASE}/entity/${ref.kind}/${ref.id}/${definitionId}/permissions`)
+            .then(d => d.data);
+    };
+
     const findByEntityKind = (kind) => {
         return $http
             .get(`${BASE}/entity-kind/${kind}`)
@@ -55,6 +62,20 @@ export function store($http, BaseApiUrl) {
             .then(d => d.data);
     };
 
+    const lock = (ref, assessmentDefinitionId, ratingId) => {
+        checkIsEntityRef(ref);
+        return $http
+            .put(`${BASE}/entity/${ref.kind}/${ref.id}/${assessmentDefinitionId}/${ratingId}/lock`)
+            .then(d => d.data);
+    };
+
+    const unlock = (ref, assessmentDefinitionId, ratingId) => {
+        checkIsEntityRef(ref);
+        return $http
+            .put(`${BASE}/entity/${ref.kind}/${ref.id}/${assessmentDefinitionId}/${ratingId}/unlock`)
+            .then(d => d.data);
+    };
+
     const bulkStore = (assessmentDefinitionId, commands = []) => {
         return $http
             .post(`${BASE}/bulk-update/${assessmentDefinitionId}`, commands)
@@ -67,22 +88,39 @@ export function store($http, BaseApiUrl) {
             .then(d => d.data);
     };
 
-    const remove = (ref, assessmentDefinitionId) => {
+    const remove = (ref, assessmentDefinitionId, ratingId) => {
         checkIsEntityRef(ref);
         return $http
-            .delete(`${BASE}/entity/${ref.kind}/${ref.id}/${assessmentDefinitionId}`)
+            .delete(`${BASE}/entity/${ref.kind}/${ref.id}/${assessmentDefinitionId}/${ratingId}`)
+            .then(d => d.data);
+    };
+
+    const ripple = () => {
+        return $http
+            .post(`${BASE}/ripple/all`)
+            .then(d => d.data);
+    };
+
+    const findRippleConfig = () => {
+        return $http
+            .get(`${BASE}/ripple/config`)
             .then(d => d.data);
     };
 
     return {
+        getRatingPermissions,
         findForEntityReference,
         findByEntityKind,
         findByAssessmentDefinitionId,
         findByTargetKindForRelatedSelector,
         store,
+        lock,
+        unlock,
         bulkStore,
         bulkRemove,
-        remove
+        remove,
+        ripple,
+        findRippleConfig
     };
 }
 
@@ -97,6 +135,11 @@ export const serviceName = "AssessmentRatingStore";
 
 
 export const AssessmentRatingStore_API = {
+    getRatingPermissions: {
+        serviceName,
+        serviceFnName: "getRatingPermissions",
+        description: "find permissions for a single rating [ref, assessmentDefId]"
+    },
     findForEntityReference: {
         serviceName,
         serviceFnName: "findForEntityReference",
@@ -122,6 +165,16 @@ export const AssessmentRatingStore_API = {
         serviceFnName: "store",
         description: "update or create a rating"
     },
+    lock: {
+        serviceName,
+        serviceFnName: "lock",
+        description: "Locks a rating [ref, defId]"
+    },
+    unlock: {
+        serviceName,
+        serviceFnName: "unlock",
+        description: "Unlocks a locked rating [ref, defId]"
+    },
     bulkStore: {
         serviceName,
         serviceFnName: "bulkStore",
@@ -136,6 +189,16 @@ export const AssessmentRatingStore_API = {
         serviceName,
         serviceFnName: "remove",
         description: "remove a rating"
+    },
+    ripple: {
+        serviceName,
+        serviceFnName: "ripple",
+        description: "ripple assessments based on the settings table config"
+    },
+    findRippleConfig: {
+        serviceName,
+        serviceFnName: "findRippleConfig",
+        description: "ripple assessments based on the settings table config"
     }
 };
 

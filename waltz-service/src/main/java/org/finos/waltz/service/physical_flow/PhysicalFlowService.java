@@ -18,9 +18,14 @@
 
 package org.finos.waltz.service.physical_flow;
 
+import org.finos.waltz.common.exception.InsufficientPrivelegeException;
+import org.finos.waltz.common.exception.ModifyingReadOnlyRecordException;
+import org.finos.waltz.common.exception.NotFoundException;
 import org.finos.waltz.service.changelog.ChangeLogService;
+import org.finos.waltz.service.data_type.DataTypeDecoratorService;
 import org.finos.waltz.service.external_identifier.ExternalIdentifierService;
 import org.finos.waltz.service.logical_flow.LogicalFlowService;
+import org.finos.waltz.service.permission.permission_checker.FlowPermissionChecker;
 import org.finos.waltz.service.physical_specification.PhysicalSpecificationService;
 import org.finos.waltz.data.physical_flow.PhysicalFlowDao;
 import org.finos.waltz.data.physical_flow.PhysicalFlowIdSelectorFactory;
@@ -44,6 +49,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
+import static java.util.Collections.emptySet;
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.common.DateTimeUtilities.nowUtc;
 import static org.finos.waltz.common.StringUtilities.isEmpty;
@@ -57,10 +63,13 @@ public class PhysicalFlowService {
 
     private final PhysicalFlowDao physicalFlowDao;
     private final PhysicalSpecificationService physicalSpecificationService;
+    private final DataTypeDecoratorService dataTypeDecoratorService;
     private final ChangeLogService changeLogService;
     private final LogicalFlowService logicalFlowService;
     private final ExternalIdentifierService externalIdentifierService;
     private final PhysicalFlowIdSelectorFactory physicalFlowIdSelectorFactory = new PhysicalFlowIdSelectorFactory();
+
+    private final FlowPermissionChecker flowPermissionChecker;
 
 
     @Autowired
@@ -68,17 +77,24 @@ public class PhysicalFlowService {
                                LogicalFlowService logicalFlowService,
                                PhysicalFlowDao physicalDataFlowDao,
                                PhysicalSpecificationService physicalSpecificationService,
-                               ExternalIdentifierService externalIdentifierService) {
+                               ExternalIdentifierService externalIdentifierService,
+                               DataTypeDecoratorService dataTypeDecoratorService,
+                               FlowPermissionChecker flowPermissionChecker) {
+
         checkNotNull(changeLogService, "changeLogService cannot be null");
         checkNotNull(logicalFlowService, "logicalFlowService cannot be null");
         checkNotNull(physicalDataFlowDao, "physicalFlowDao cannot be null");
         checkNotNull(physicalSpecificationService, "physicalSpecificationService cannot be null");
+        checkNotNull(dataTypeDecoratorService, "dataTypeDecoratorService cannot be null");
+        checkNotNull(flowPermissionChecker, "flowPermissionChecker cannot be null");
 
         this.changeLogService = changeLogService;
         this.logicalFlowService = logicalFlowService;
         this.physicalFlowDao = physicalDataFlowDao;
         this.physicalSpecificationService = physicalSpecificationService;
         this.externalIdentifierService = externalIdentifierService;
+        this.dataTypeDecoratorService = dataTypeDecoratorService;
+        this.flowPermissionChecker = flowPermissionChecker;
     }
 
 
@@ -215,8 +231,9 @@ public class PhysicalFlowService {
                         .withLastUpdatedAt(now)
                         .withCreated(UserTimestamp.mkForUser(username, now))));
 
-        PhysicalFlow flow = ImmutablePhysicalFlow.builder()
+        ImmutablePhysicalFlow.Builder flowBuilder = ImmutablePhysicalFlow.builder()
                 .specificationId(specId)
+                .name(command.flowAttributes().name())
                 .basisOffset(command.flowAttributes().basisOffset())
                 .frequency(command.flowAttributes().frequency())
                 .transport(command.flowAttributes().transport())
@@ -225,12 +242,18 @@ public class PhysicalFlowService {
                 .logicalFlowId(command.logicalFlowId())
                 .lastUpdatedBy(username)
                 .lastUpdatedAt(now)
-                .created(UserTimestamp.mkForUser(username, now))
-                .build();
+                .created(UserTimestamp.mkForUser(username, now));
+
+        command
+                .flowAttributes()
+                .externalId()
+                .ifPresent(flowBuilder::externalId);
+
+        PhysicalFlow flow = flowBuilder.build();
 
         // ensure existing not in database
         List<PhysicalFlow> byAttributesAndSpecification = physicalFlowDao.findByAttributesAndSpecification(flow);
-        if(byAttributesAndSpecification.size() > 0) {
+        if (byAttributesAndSpecification.size() > 0) {
             return ImmutablePhysicalFlowCreateCommandResponse.builder()
                     .originalCommand(command)
                     .outcome(CommandOutcome.FAILURE)
@@ -241,8 +264,17 @@ public class PhysicalFlowService {
 
         long physicalFlowId = physicalFlowDao.create(flow);
 
-        if(command.specification().isRemoved()) {
+        if (command.specification().isRemoved()) {
             physicalSpecificationService.makeActive(specId, username);
+        }
+
+        if (!command.dataTypeIds().isEmpty()) {
+            //create dts on spec, these are cascaded onto logical
+            dataTypeDecoratorService.updateDecorators(
+                    username,
+                    mkRef(EntityKind.PHYSICAL_SPECIFICATION, specId),
+                    command.dataTypeIds(),
+                    emptySet());
         }
 
         changeLogService.writeChangeLogEntries(
@@ -300,6 +332,7 @@ public class PhysicalFlowService {
 
     public int updateAttribute(String username, SetAttributeCommand command) {
 
+
         int rc = doUpdateAttribute(command);
 
         if (rc != 0) {
@@ -319,11 +352,12 @@ public class PhysicalFlowService {
 
     private int doUpdateAttribute(SetAttributeCommand command) {
         long flowId = command.entityReference().id();
+        ensureFlowExistsAndIsNotReadOnly(flowId);
         switch(command.name()) {
             case "criticality":
-                return physicalFlowDao.updateCriticality(flowId, Criticality.valueOf(command.value()));
+                return physicalFlowDao.updateCriticality(flowId, CriticalityValue.of(command.value()));
             case "frequency":
-                return physicalFlowDao.updateFrequency(flowId, FrequencyKind.valueOf(command.value()));
+                return physicalFlowDao.updateFrequency(flowId, FrequencyKindValue.of(command.value()));
             case "transport":
                 return physicalFlowDao.updateTransport(flowId, command.value());
             case "basisOffset":
@@ -337,6 +371,27 @@ public class PhysicalFlowService {
                         "Cannot update attribute %s on flow as unknown attribute name",
                         command.name());
                 throw new UnsupportedOperationException(errMsg);
+        }
+    }
+
+    /**
+     * Verifies that a flow exists and is not read only.
+     * If it is then the corresponding exception is thrown, namely one of:
+     *
+     * <ul>
+     *   <li>NotFoundException</li>
+     *   <li>ModifyingReadOnlyRecordException</li>
+     * </ul>
+     *
+     * @param flowId  identifier of the flow being checked
+     */
+    private void ensureFlowExistsAndIsNotReadOnly(long flowId) {
+        PhysicalFlow flow = getById(flowId);
+        if (flow == null) {
+            throw new NotFoundException("PF_NOTFOUND", "Physical Flow: %d not found", flowId);
+        }
+        if (flow.isReadOnly()) {
+            throw new ModifyingReadOnlyRecordException("PF_READONLY", "Physical Flow: %d is read only", flowId);
         }
     }
 
@@ -377,7 +432,7 @@ public class PhysicalFlowService {
                         targetSpec.id()
                                 .ifPresent(id ->
                                         physicalSpecificationService.updateExternalId(id, sourceExtId));
-                    } else if(!externalIdentifiers.contains(sourceExtId)) {
+                    } else if (!externalIdentifiers.contains(sourceExtId)) {
                         externalIdentifierService.create(toRef, sourceExtId, username);
                     }
                 });
@@ -387,4 +442,15 @@ public class PhysicalFlowService {
     public Collection<PhysicalFlowInfo> findUnderlyingPhysicalFlows(Long logicalFlowId) {
         return physicalFlowDao.findUnderlyingPhysicalFlows(logicalFlowId);
     }
+
+    public void checkLogicalFlowPermission(EntityReference ref, String username) throws InsufficientPrivelegeException {
+        Set<Operation> permissions = flowPermissionChecker.findPermissionsForFlow(ref.id(), username);
+        flowPermissionChecker.verifyEditPerms(permissions, EntityKind.PHYSICAL_FLOW, username);
+    }
+
+    public void checkHasPermission(long flowId, String username) throws InsufficientPrivelegeException {
+        PhysicalFlow physFlow = getById(flowId);
+        checkLogicalFlowPermission(EntityReference.mkRef(EntityKind.LOGICAL_DATA_FLOW, physFlow.logicalFlowId()), username);
+    }
+
 }

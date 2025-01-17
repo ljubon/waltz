@@ -1,33 +1,34 @@
 package org.finos.waltz.integration_test.inmem.service;
 
 import org.finos.waltz.integration_test.inmem.BaseInMemoryIntegrationTest;
-import org.finos.waltz.integration_test.inmem.helpers.ChangeLogHelper;
-import org.finos.waltz.integration_test.inmem.helpers.PersonHelper;
-import org.finos.waltz.integration_test.inmem.helpers.SurveyTemplateHelper;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.Operation;
 import org.finos.waltz.model.ReleaseLifecycleStatus;
-import org.finos.waltz.model.survey.*;
+import org.finos.waltz.model.survey.ImmutableSurveyTemplateChangeCommand;
+import org.finos.waltz.model.survey.SurveyTemplate;
+import org.finos.waltz.model.survey.SurveyTemplateChangeCommand;
 import org.finos.waltz.service.survey.SurveyQuestionService;
 import org.finos.waltz.service.survey.SurveyTemplateService;
+import org.finos.waltz.test_common.helpers.ChangeLogHelper;
+import org.finos.waltz.test_common.helpers.PersonHelper;
+import org.finos.waltz.test_common.helpers.SurveyTemplateHelper;
 import org.jooq.DSLContext;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
+import static java.util.Collections.emptySet;
+import static java.util.stream.Collectors.toSet;
 import static org.finos.waltz.common.CollectionUtilities.find;
 import static org.finos.waltz.common.StringUtilities.lower;
-import static org.finos.waltz.integration_test.inmem.helpers.NameHelper.mkName;
-import static org.finos.waltz.integration_test.inmem.helpers.NameHelper.mkUserId;
 import static org.finos.waltz.model.EntityReference.mkRef;
-import static org.finos.waltz.schema.Tables.SURVEY_QUESTION_RESPONSE;
-import static org.finos.waltz.schema.tables.SurveyQuestion.SURVEY_QUESTION;
-import static org.finos.waltz.schema.tables.SurveyTemplate.SURVEY_TEMPLATE;
-import static org.junit.Assert.*;
+import static org.finos.waltz.test_common.helpers.NameHelper.mkName;
+import static org.finos.waltz.test_common.helpers.NameHelper.mkUserId;
+import static org.junit.jupiter.api.Assertions.*;
 
 @Service
 public class SurveyTemplateServiceTest extends BaseInMemoryIntegrationTest {
@@ -52,11 +53,13 @@ public class SurveyTemplateServiceTest extends BaseInMemoryIntegrationTest {
 
 
     @Test
-    public void cannotFindAllIfNoMatchingPersonForUser() {
-        assertThrows(
-                "should fail if no matching person",
-                IllegalArgumentException.class,
-                () -> surveyTemplateService.findAll("foo"));
+    public void ifCannotFindPersonMustOnlyReturnActiveTemplates() {
+        List<SurveyTemplate> surveys = surveyTemplateService.findForOwner("foo");
+        Set<SurveyTemplate> nonActiveTemplates = surveys
+                .stream()
+                .filter(r -> r.status().equals(ReleaseLifecycleStatus.ACTIVE))
+                .collect(toSet());
+        assertEquals(emptySet(), nonActiveTemplates, "all templates should be active if user cannot be found");
     }
 
 
@@ -65,7 +68,7 @@ public class SurveyTemplateServiceTest extends BaseInMemoryIntegrationTest {
         templateHelper.deleteAllSurveyTemplate();
         String userId = mkUserId("findAllReturnsEmptyListIfNoTemplates");
         personHelper.createPerson(userId);
-        List<SurveyTemplate> templates = surveyTemplateService.findAll(userId);
+        List<SurveyTemplate> templates = surveyTemplateService.findForOwner(userId);
         assertNotNull(templates);
         assertTrue(templates.isEmpty());
     }
@@ -79,7 +82,7 @@ public class SurveyTemplateServiceTest extends BaseInMemoryIntegrationTest {
         personHelper.createPerson(userId);
 
         long id = templateHelper.createTemplate(userId, templateName);
-        List<SurveyTemplate> all = surveyTemplateService.findAll(userId);
+        List<SurveyTemplate> all = surveyTemplateService.findForOwner(userId);
 
         assertNotNull(all);
         assertNotNull(find(
@@ -182,14 +185,16 @@ public class SurveyTemplateServiceTest extends BaseInMemoryIntegrationTest {
 
         long cloneId = surveyTemplateService.clone(userId, templateId);
 
-        assertTrue("clone id should be different", cloneId != templateId);
+        assertTrue(cloneId != templateId, "clone id should be different");
 
         SurveyTemplate cloned = surveyTemplateService.getById(cloneId);
 
-        assertEquals("status should have reset to DRAFT", ReleaseLifecycleStatus.DRAFT, cloned.status());
+        assertEquals(ReleaseLifecycleStatus.DRAFT, cloned.status(), "status should have reset to DRAFT");
         assertTrue(cloned.name().contains(templateName));
         assertTrue(lower(cloned.name()).contains("clone"));
 
-        assertEquals("Should have copied the question", 1, surveyQuestionService.findForSurveyTemplate(cloneId).size());
+        assertEquals(1, surveyQuestionService.findForSurveyTemplate(cloneId).size(), "Should have copied the question");
     }
+
+
 }

@@ -19,20 +19,22 @@
 package org.finos.waltz.web.endpoints.api;
 
 
+import org.finos.waltz.model.attestation.UserAttestationPermission;
+import org.finos.waltz.model.permission_group.Permission;
 import org.finos.waltz.service.permission.PermissionGroupService;
 import org.finos.waltz.web.ListRoute;
 import org.finos.waltz.web.endpoints.Endpoint;
-import org.finos.waltz.model.permission_group.Permission;
-import org.finos.waltz.web.WebUtilities;
-import org.finos.waltz.web.endpoints.EndpointUtilities;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import static org.finos.waltz.web.WebUtilities.*;
+import static org.finos.waltz.web.endpoints.EndpointUtilities.getForList;
 
 
 @Service
 public class PermissionGroupEndpoint implements Endpoint {
 
-    private static final String BASE_URL = WebUtilities.mkPath("api", "permission-group");
+    private static final String BASE_URL = mkPath("api", "permission-group");
 
     private final PermissionGroupService permissionGroupService;
 
@@ -44,17 +46,33 @@ public class PermissionGroupEndpoint implements Endpoint {
 
     @Override
     public void register() {
-        String findByParentEntityRefPath = WebUtilities.mkPath(BASE_URL,
+
+        String findPermissionsForParentEntityRefPath = mkPath(
+                BASE_URL,
                 "entity-ref",
                 ":kind",
                 ":id");
 
-        ListRoute<Permission> findByParentEntityRef = (request, response)
-                -> permissionGroupService.findPermissions(
-                WebUtilities.getEntityReference(request), WebUtilities.getUsername(request));
+        String findSupportedMeasurableCategoryAttestationsPath = mkPath(
+                BASE_URL,
+                "entity-ref",
+                ":kind",
+                ":id",
+                "supported-attestations",
+                "measurable-category");
 
-        EndpointUtilities.getForList(findByParentEntityRefPath, findByParentEntityRef);
+        ListRoute<UserAttestationPermission> findSupportedMeasurableCategoryAttestationsRoute = ((request, response) ->
+                permissionGroupService.findSupportedMeasurableCategoryAttestations(
+                    getEntityReference(request),
+                    getUsername(request)));
 
+        ListRoute<Permission> findPermissionsForParentEntityRefRoute = (request, response) ->
+            permissionGroupService.findPermissionsForParentReference(
+                    getEntityReference(request),
+                    getUsername(request));
+
+        getForList(findPermissionsForParentEntityRefPath, findPermissionsForParentEntityRefRoute);
+        getForList(findSupportedMeasurableCategoryAttestationsPath, findSupportedMeasurableCategoryAttestationsRoute);
     }
 
 }

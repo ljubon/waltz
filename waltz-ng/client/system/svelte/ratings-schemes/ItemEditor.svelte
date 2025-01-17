@@ -68,6 +68,19 @@
             Short name which describes this rating scheme item
         </div>
 
+        <!-- GROUP? -->
+        <label for="group">
+            Group
+            <small class="text-muted">(optional)</small>
+        </label>
+        <input class="form-control"
+               id="group"
+               placeholder="Optional grouping of rating item"
+               bind:value={workingCopy.ratingGroup}>
+        <div class="help-block">
+            Optional group name to categorize this rating scheme item
+        </div>
+
 
         <!-- CODE -->
         <label for="code">
@@ -79,11 +92,11 @@
                style="width: 3em"
                required="required"
                disabled={workingCopy.id}
-               maxlength="1"
+               maxlength="3"
                placeholder=""
                bind:value={workingCopy.rating}>
         <div class="help-block">
-            Single letter code to represent this rating scheme item
+            Short code (maximum of 3 chars) to represent this rating scheme item
             {#if workingCopy.id}
                 <br>
                 <Icon name="warning"/>
@@ -132,6 +145,27 @@
         </div>
 
 
+        <!-- REQUIRES COMMENT -->
+        <label for="requiresComment">
+            Requires Comment ?
+        </label>
+        <input type=checkbox
+               id="requiresComment"
+               bind:checked={workingCopy.requiresComment}>
+        <span class="text-muted">
+            {#if workingCopy.requiresComment}
+                Yes, user must supply a comment when selecting this item
+                <Icon name="lock"/>
+            {:else}
+                No, users may omit providing a comment when selecting this item
+                <Icon name="unlock"/>
+            {/if}
+        </span>
+        <div class="help-block">
+            Determines if the user <i>must</i> supply a comment when selecting this item.
+        </div>
+
+
         <!-- COLOR -->
         <label for="color-picker">Color</label>
         <div id="color-picker">
@@ -158,6 +192,19 @@
         <div class="help-block">
             HTML or markdown code, any paths should be absolute
         </div>
+
+        <!-- EXTERNAL ID -->
+        <label for="external-id">
+            External Identifier
+        </label>
+        <input class="form-control"
+               id="external-id"
+               placeholder="External identifier of rating item"
+               bind:value={workingCopy.externalId}>
+        <div class="help-block">
+            Short name used to identify this rating in an external system
+        </div>
+
 
     </div>
 

@@ -32,9 +32,18 @@ export function mkLogicalFlowStore() {
 
     const findBySelector = (selector, force = false) => {
         return remote.fetchViewList(
-            "POST", 
+            "POST",
             "api/logical-flow/selector",
             selector,
+            {force});
+    };
+
+
+    const findEditableFlowIdsForParentReference = (ref, force = false) => {
+        return remote.fetchViewList(
+            "GET",
+            `api/logical-flow/entity/${ref.kind}/${ref.id}/editable-flows`,
+            null,
             {force});
     }
 
@@ -48,14 +57,58 @@ export function mkLogicalFlowStore() {
                 null,
                 {},
                 {force: force});
-    }
+    };
+
+
+    const getViewForSelector = (selector, force = false) => {
+        return remote
+            .fetchViewData(
+                "POST",
+                "api/logical-flow/view",
+                selector,
+                null,
+                {force});
+    };
+
+    const findPermissionsForFlow = (flowId, force = false) => {
+        return remote
+            .fetchViewList(
+                "GET",
+                `api/logical-flow/id/${flowId}/permissions`,
+                null,
+                {},
+                {force: force});
+    };
+
+
+    const addFlow = (command) => {
+        return remote
+            .execute(
+                "POST",
+                "api/logical-flow",
+                command);
+    };
+
+
+    const removeFlow = (flowId) => {
+        return remote
+            .execute(
+                "DELETE",
+                `api/logical-flow/${flowId}`,
+                null);
+    };
 
 
     return {
         findByEntityReference,
         findBySelector,
         getFlowGraphSummary,
-        getById
+        getById,
+        addFlow,
+        findEditableFlowIdsForParentReference,
+        findPermissionsForFlow,
+        getViewForSelector,
+        removeFlow
     };
 }
 

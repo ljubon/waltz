@@ -19,16 +19,22 @@
 package org.finos.waltz.web.endpoints.api;
 
 import com.fasterxml.jackson.databind.JsonMappingException;
+import org.finos.waltz.common.exception.InsufficientPrivelegeException;
+import org.finos.waltz.model.EntityKind;
+import org.finos.waltz.model.EntityReference;
+import org.finos.waltz.model.Operation;
+import org.finos.waltz.model.SetAttributeCommand;
+import org.finos.waltz.model.physical_flow.*;
+import org.finos.waltz.model.user.SystemRole;
+import org.finos.waltz.service.logical_flow.LogicalFlowService;
+import org.finos.waltz.service.permission.permission_checker.FlowPermissionChecker;
 import org.finos.waltz.service.physical_flow.PhysicalFlowService;
 import org.finos.waltz.service.physical_flow.PhysicalFlowUploadService;
 import org.finos.waltz.service.user.UserRoleService;
 import org.finos.waltz.web.DatumRoute;
 import org.finos.waltz.web.ListRoute;
-import org.finos.waltz.web.endpoints.Endpoint;
-import org.finos.waltz.model.SetAttributeCommand;
-import org.finos.waltz.model.physical_flow.*;
-import org.finos.waltz.model.user.SystemRole;
 import org.finos.waltz.web.WebUtilities;
+import org.finos.waltz.web.endpoints.Endpoint;
 import org.finos.waltz.web.endpoints.EndpointUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,10 +46,12 @@ import spark.Response;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.finos.waltz.common.Checks.checkNotNull;
+import static org.finos.waltz.web.WebUtilities.getLong;
 
 @Service
 public class PhysicalFlowEndpoint implements Endpoint {
@@ -54,20 +62,28 @@ public class PhysicalFlowEndpoint implements Endpoint {
 
     private final PhysicalFlowService physicalFlowService;
     private final UserRoleService userRoleService;
+    private final LogicalFlowService logicalFlowService;
     private final PhysicalFlowUploadService physicalFlowUploadService;
+    private final FlowPermissionChecker flowPermissionChecker;
 
 
     @Autowired
     public PhysicalFlowEndpoint(PhysicalFlowService physicalFlowService,
                                 PhysicalFlowUploadService physicalFlowUploadService,
-                                UserRoleService userRoleService) {
+                                LogicalFlowService logicalFlowService,
+                                UserRoleService userRoleService,
+                                FlowPermissionChecker flowPermissionChecker) {
         checkNotNull(physicalFlowService, "physicalFlowService cannot be null");
         checkNotNull(physicalFlowUploadService, "physicalFlowUploadService cannot be null");
         checkNotNull(userRoleService, "userRoleService cannot be null");
+        checkNotNull(logicalFlowService, "logicalFlowService cannot be null");
+        checkNotNull(flowPermissionChecker, "flowPermissionService cannot be null");
 
         this.physicalFlowService = physicalFlowService;
         this.physicalFlowUploadService = physicalFlowUploadService;
         this.userRoleService = userRoleService;
+        this.logicalFlowService = logicalFlowService;
+        this.flowPermissionChecker = flowPermissionChecker;
     }
 
 
@@ -189,8 +205,8 @@ public class PhysicalFlowEndpoint implements Endpoint {
 
         DatumRoute<Boolean> mergeRoute =
                 (request, response) -> physicalFlowService
-                        .merge(WebUtilities.getLong(request, "fromId"),
-                                WebUtilities.getLong(request,"toId"),
+                        .merge(getLong(request, "fromId"),
+                                getLong(request, "toId"),
                                 WebUtilities.getUsername(request));
 
         EndpointUtilities.getForDatum(getByIdPath, getByIdRoute);
@@ -214,11 +230,12 @@ public class PhysicalFlowEndpoint implements Endpoint {
     }
 
 
-    private PhysicalFlowCreateCommandResponse createFlow(Request request, Response response) throws IOException {
-        WebUtilities.requireRole(userRoleService, request, SystemRole.LOGICAL_DATA_FLOW_EDITOR);
+    private PhysicalFlowCreateCommandResponse createFlow(Request request, Response response) throws IOException, InsufficientPrivelegeException {
         String username = WebUtilities.getUsername(request);
-
         PhysicalFlowCreateCommand command = WebUtilities.readBody(request, PhysicalFlowCreateCommand.class);
+
+        physicalFlowService.checkLogicalFlowPermission(EntityReference.mkRef(EntityKind.LOGICAL_DATA_FLOW, command.logicalFlowId()), username);
+
         return physicalFlowService.create(command, username);
     }
 
@@ -235,21 +252,22 @@ public class PhysicalFlowEndpoint implements Endpoint {
     }
 
 
-    private int updateAttribute(Request request, Response response) throws IOException {
-        WebUtilities.requireRole(userRoleService, request, SystemRole.LOGICAL_DATA_FLOW_EDITOR);
+    private int updateAttribute(Request request, Response response) throws IOException, InsufficientPrivelegeException {
         String username = WebUtilities.getUsername(request);
         SetAttributeCommand command
                 = WebUtilities.readBody(request, SetAttributeCommand.class);
+
+        physicalFlowService.checkHasPermission(command.entityReference().id(), username);
 
         return physicalFlowService.updateAttribute(username, command);
     }
 
 
-    private PhysicalFlowDeleteCommandResponse deleteFlow(Request request, Response response) {
-        WebUtilities.requireRole(userRoleService, request, SystemRole.LOGICAL_DATA_FLOW_EDITOR);
-
+    private PhysicalFlowDeleteCommandResponse deleteFlow(Request request, Response response) throws InsufficientPrivelegeException {
         long flowId = WebUtilities.getId(request);
         String username = WebUtilities.getUsername(request);
+
+        physicalFlowService.checkHasPermission(flowId, username);
 
         ImmutablePhysicalFlowDeleteCommand deleteCommand = ImmutablePhysicalFlowDeleteCommand.builder()
                 .flowId(flowId)
@@ -260,7 +278,7 @@ public class PhysicalFlowEndpoint implements Endpoint {
 
 
     private List<PhysicalFlowUploadCommandResponse> validateUpload(Request request, Response response) throws IOException {
-        WebUtilities.requireRole(userRoleService, request, SystemRole.LOGICAL_DATA_FLOW_EDITOR);
+        WebUtilities.requireRole(userRoleService, request, SystemRole.BULK_FLOW_EDITOR);
         try {
             List<PhysicalFlowUploadCommand> commands = Arrays.asList(WebUtilities.readBody(request, PhysicalFlowUploadCommand[].class));
             return physicalFlowUploadService.validate(commands);
@@ -289,7 +307,7 @@ public class PhysicalFlowEndpoint implements Endpoint {
 
 
     private List<PhysicalFlowUploadCommandResponse> upload(Request request, Response response) throws IOException, Exception {
-        WebUtilities.requireRole(userRoleService, request, SystemRole.LOGICAL_DATA_FLOW_EDITOR);
+        WebUtilities.requireRole(userRoleService, request, SystemRole.BULK_FLOW_EDITOR);
         List<PhysicalFlowUploadCommand> commands = Arrays.asList(WebUtilities.readBody(request, PhysicalFlowUploadCommand[].class));
         String username = WebUtilities.getUsername(request);
 

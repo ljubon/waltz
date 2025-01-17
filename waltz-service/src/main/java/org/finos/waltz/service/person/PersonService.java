@@ -18,6 +18,7 @@
 
 package org.finos.waltz.service.person;
 
+import org.finos.waltz.common.CollectionUtilities;
 import org.finos.waltz.data.person.PersonDao;
 import org.finos.waltz.data.person.search.PersonSearchDao;
 import org.finos.waltz.model.EntityKind;
@@ -28,6 +29,7 @@ import org.finos.waltz.model.person.PersonKind;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,7 +37,6 @@ import java.util.Set;
 import static java.util.Collections.emptyList;
 import static org.finos.waltz.common.Checks.checkNotEmpty;
 import static org.finos.waltz.common.Checks.checkNotNull;
-import static org.finos.waltz.common.FunctionUtilities.time;
 import static org.finos.waltz.common.StringUtilities.isEmpty;
 
 @Service
@@ -68,7 +69,15 @@ public class PersonService {
 
     public List<Person> findDirectsByEmployeeId(String employeeId) {
         checkNotEmpty(employeeId, "Cannot find directs without an employeeId");
-        return time("PS.findDirectsByEmployeeId", () -> personDao.findDirectsByEmployeeId(employeeId));
+        return personDao.findDirectsByEmployeeId(employeeId);
+    }
+
+
+    public List<Person> findDirectsForPersonIds(List<Long> personIds) {
+        if (CollectionUtilities.isEmpty(personIds)) {
+            return Collections.emptyList();
+        }
+        return personDao.findDirectsForPersonIds(personIds);
     }
 
 
@@ -77,7 +86,7 @@ public class PersonService {
      **/
     public List<Person> findAllManagersByEmployeeId(String employeeId) {
         checkNotEmpty(employeeId, "Cannot find directs without an employeeId");
-        return time("PS.findAllManagersByEmployeeId", () -> personDao.findAllManagersByEmployeeId(employeeId));
+        return personDao.findAllManagersByEmployeeId(employeeId);
     }
 
 
@@ -120,4 +129,5 @@ public class PersonService {
     public Set<Person> findActivePeopleByEmails(Set<String> emails){
         return personDao.findActivePeopleByEmails(emails);
     }
+
 }

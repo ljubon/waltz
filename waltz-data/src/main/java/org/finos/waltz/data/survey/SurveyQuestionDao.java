@@ -18,27 +18,34 @@
 
 package org.finos.waltz.data.survey;
 
-import org.finos.waltz.schema.tables.records.SurveyQuestionRecord;
 import org.finos.waltz.common.StringUtilities;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.EntityReference;
 import org.finos.waltz.model.survey.ImmutableSurveyQuestion;
 import org.finos.waltz.model.survey.SurveyQuestion;
 import org.finos.waltz.model.survey.SurveyQuestionFieldType;
-import org.jooq.*;
+import org.finos.waltz.schema.tables.records.SurveyQuestionRecord;
+import org.jooq.DSLContext;
+import org.jooq.Record;
+import org.jooq.Record1;
+import org.jooq.RecordMapper;
+import org.jooq.Select;
 import org.jooq.impl.DSL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
-import static org.finos.waltz.schema.Tables.*;
-import static org.finos.waltz.schema.tables.SurveyQuestion.SURVEY_QUESTION;
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.common.Checks.checkTrue;
 import static org.finos.waltz.model.EntityReference.mkRef;
+import static org.finos.waltz.schema.Tables.SURVEY_INSTANCE;
+import static org.finos.waltz.schema.Tables.SURVEY_QUESTION_RESPONSE;
+import static org.finos.waltz.schema.Tables.SURVEY_RUN;
+import static org.finos.waltz.schema.tables.SurveyQuestion.SURVEY_QUESTION;
 
 @Repository
 public class SurveyQuestionDao {
@@ -186,5 +193,14 @@ public class SurveyQuestionDao {
                 .where(SURVEY_QUESTION.SURVEY_TEMPLATE_ID.in(templateIdSelector))
                 .orderBy(SURVEY_QUESTION.POSITION.asc(), SURVEY_QUESTION.QUESTION_TEXT)
                 .fetch(TO_DOMAIN_MAPPER);
+    }
+
+
+    public Set<SurveyQuestion> findForIds(Set<Long> surveyQuestionsIds) {
+        return dsl
+                .select(SURVEY_QUESTION.fields())
+                .from(SURVEY_QUESTION)
+                .where(SURVEY_QUESTION.ID.in(surveyQuestionsIds))
+                .fetchSet(TO_DOMAIN_MAPPER);
     }
 }

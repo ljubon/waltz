@@ -20,14 +20,23 @@ import {remote} from "./remote";
 
 export function mkReportGridStore() {
 
-    const findAll = (force = false) => remote
-        .fetchAppList("GET", "api/report-grid/all", [], {force});
+    const findAllDefinitions = (force = false) => remote
+        .fetchAppList("GET", "api/report-grid/definition/all", [], {force});
 
-    const findForUser = (force = false) => remote
-        .fetchAppList("GET", "api/report-grid/user", [], {force});
+    const findDefinitionsForUser = (force = false) => remote
+        .fetchViewList("GET", "api/report-grid/definition/user", [], {force});
 
-    const findForOwner = (force = false) => remote
-        .fetchAppList("GET", "api/report-grid/owner", [], {force});
+    const findInfoForUser = (force = false) => remote
+        .fetchViewList("GET", "api/report-grid/info/user", [], {force});
+
+    const findDefinitionsForOwner = (force = false) => remote
+        .fetchViewList("GET", "api/report-grid/definition/owner", [], {force});
+
+    const getViewById = (id, selectionOptions, force = false) => remote
+        .fetchViewData("POST", `api/report-grid/view/id/${id}`, selectionOptions, null, {force});
+
+    const findAdditionalColumnOptionsForKind = (kind, force = false) => remote
+        .fetchViewList("GET", `api/report-grid/additional-column-options/kind/${kind}`, [], {force});
 
     const updateColumnDefinitions = (id, updatecommand) => remote
         .execute(
@@ -47,15 +56,23 @@ export function mkReportGridStore() {
         return remote.execute("DELETE", `api/report-grid/id/${id}`);
     };
 
+    const clone = (id, cloneCmd) => {
+        return remote.execute("POST", `api/report-grid/id/${id}/clone`, cloneCmd);
+    };
+
 
     return {
-        findAll,
-        findForUser,
-        findForOwner,
+        findAllDefinitions,
+        findDefinitionsForUser,
+        findDefinitionsForOwner,
+        findInfoForUser,
+        findAdditionalColumnOptionsForKind,
+        getViewById,
         updateColumnDefinitions,
         create,
         update,
-        remove
+        remove,
+        clone
     };
 }
 

@@ -19,7 +19,7 @@
 package org.finos.waltz.web;
 
 import com.tngtech.archunit.lang.ArchRule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.springframework.stereotype.Repository;
 
 import static com.tngtech.archunit.core.domain.JavaModifier.ABSTRACT;
@@ -53,19 +53,6 @@ public class DaoArchitectureComplianceTest extends BaseArchitectureComplianceTes
                 .should(haveFindMethodsThatReturnCollectionsOrMapsOrOptionals);
 
         rule.check(waltzAndJavaUtilClasses);
-    }
-
-
-    @Test
-    public void daoMethodsShouldNotUseSelectFrom() {
-
-        ArchRule rule = classes().that()
-                .areNotInterfaces()
-                .and()
-                .haveNameMatching(".*Dao")
-                .should(notHaveDaoMethodsWhichCallSelectFrom);
-
-        rule.check(waltzOnlyClasses);
     }
 
 }

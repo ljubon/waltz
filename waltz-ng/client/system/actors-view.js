@@ -21,6 +21,7 @@ import {initialiseData} from "../common";
 import template from "./actors-view.html";
 import {displayError} from "../common/error-utils";
 import toasts from "../svelte-stores/toast-store";
+import {CORE_API} from "../common/services/core-api-utils";
 
 
 const initialState = {
@@ -31,20 +32,29 @@ const initialState = {
 
 
 function controller($q,
-                    actorService) {
+                    actorService,
+                    serviceBroker) {
 
     const vm = initialiseData(this, initialState);
 
     function update(actor, change) {
         const updateCmd = Object.assign(change, { id: actor.id });
         return actorService.update(updateCmd)
-            .then(() => toasts.success("Updated"));
+            .then(() => toasts.success("Updated"))
+            .catch(e => displayError("Could not add update actor", e));
+    }
+
+    function loadActors() {
+        actorService
+            .loadActors()
+            .then(kinds => vm.actors = kinds);
     }
 
     vm.updateName = (change, actor) => {
         if(change.newVal === "") return $q.reject("Too short");
         return update(actor, { name: change })
             .then(() => _.find(vm.actors, {"id": actor.id}).name = change.newVal);
+
     };
 
     vm.updateDescription = (change, actor) => {
@@ -62,13 +72,14 @@ function controller($q,
     vm.updateExternalId = (change, actor) => {
         if(change.newVal === null) return $q.reject("No value provided");
         return update(actor, { externalId: change })
-            .then(() => _.find(vm.actors, {"id": actor.id}).externalId = change.newVal)
-            .catch(e => displayError("Failed to save external id", e));
+            .then(() => _.find(vm.actors, {"id": actor.id}).externalId = change.newVal);
     };
-
 
     vm.startNewActor = () => {
         vm.creatingActor = true;
+        serviceBroker
+            .loadViewData(CORE_API.UIDStore.generateOne, [], {force: true})
+            .then(r => vm.newActor.externalId = r.data);
     };
 
     vm.saveNewActor = () => {
@@ -79,34 +90,28 @@ function controller($q,
                 vm.creatingActor = false;
                 vm.newActor = {};
                 loadActors();
-            });
+            })
+            .catch(e => displayError("Could not create actor", e));
     };
 
     vm.cancelNewActor = () => {
         vm.creatingActor = false;
-        console.log("cancelled new");
     };
-
-
-    function loadActors() {
-        actorService
-            .loadActors()
-            .then(kinds => {
-                vm.actors = kinds;
-            });
-    }
-
-    loadActors();
 
     vm.selectActor = (actor) => {
         vm.selectedActor = actor;
     };
+
+    // --- boot --
+
+    loadActors();
 }
 
 
 controller.$inject = [
     "$q",
-    "ActorService"
+    "ActorService",
+    "ServiceBroker"
 ];
 
 

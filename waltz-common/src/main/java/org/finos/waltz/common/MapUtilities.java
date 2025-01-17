@@ -19,12 +19,15 @@
 package org.finos.waltz.common;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static java.util.Collections.emptyMap;
@@ -35,7 +38,7 @@ import static java.util.stream.Collectors.toMap;
 public class MapUtilities {
 
     public static <K, V> HashMap<K, V> newHashMap() {
-         return new HashMap<>();
+        return new HashMap<>();
     }
 
 
@@ -61,7 +64,6 @@ public class MapUtilities {
         map.put(k3, v3);
         return map;
     }
-
 
 
     public static <K, V> Map<K, V> newHashMap(K k1, V v1,
@@ -109,8 +111,8 @@ public class MapUtilities {
 
 
     public static <K, V, V2> Map<K, Collection<V2>> groupBy(Collection<V> xs,
-                                                           Function<V, K> keyFn,
-                                                           Function<V, V2> valueFn) {
+                                                            Function<V, K> keyFn,
+                                                            Function<V, V2> valueFn) {
         return groupBy(keyFn, valueFn, xs);
     }
 
@@ -122,6 +124,26 @@ public class MapUtilities {
         checkNotNull(valueFn, "valueFn cannot be null");
 
         Map<K, Collection<V2>> result = MapUtilities.newHashMap();
+        for (V v: xs) {
+            K key = keyFn.apply(v);
+            Collection<V2> bucket = result.computeIfAbsent(key, u -> ListUtilities.newArrayList());
+            bucket.add(valueFn.apply(v));
+            result.put(key, bucket);
+        }
+        return result;
+    }
+
+
+    public static <K, V, V2> TreeMap<K, Collection<V2>> orderedGroupBy(Collection<V> xs,
+                                                                       Function<V, K> keyFn,
+                                                                       Function<V, V2> valueFn,
+                                                                       Comparator<K> comparator) {
+        checkNotNull(xs, "xs cannot be null");
+        checkNotNull(keyFn, "keyFn cannot be null");
+        checkNotNull(valueFn, "valueFn cannot be null");
+
+        TreeMap<K, Collection<V2>> result = new TreeMap<>(comparator);
+
         for (V v: xs) {
             K key = keyFn.apply(v);
             Collection<V2> bucket = result.computeIfAbsent(key, u -> ListUtilities.newArrayList());
@@ -154,7 +176,6 @@ public class MapUtilities {
     }
 
 
-
     public static <K, R, V> Map<K, R> indexBy(Function<V, K> keyFn,
                                               Function<V, R> valueFn,
                                               Collection<V> xs) {
@@ -162,8 +183,14 @@ public class MapUtilities {
         checkNotNull(keyFn, "keyFn cannot be null");
         checkNotNull(valueFn, "valueFn cannot be null");
 
-        return xs.stream()
-                .collect(toMap(keyFn, valueFn));
+        return xs
+                .stream()
+                .collect(
+                        HashMap::new,
+                        (acc, d) -> acc.put(
+                                keyFn.apply(d),
+                                valueFn.apply(d)),
+                        Map::putAll);
     }
 
 
@@ -190,6 +217,11 @@ public class MapUtilities {
 
     public static <K, V> Map<K, Long> countBy(Function<V, K> keyFn,
                                               Collection<V> xs) {
+        return countBy(xs, keyFn);
+    }
+
+    public static <K, V> Map<K, Long> countBy(Collection<V> xs,
+                                              Function<V, K> keyFn) {
         if (xs == null) {
             return emptyMap();
         }
@@ -224,21 +256,22 @@ public class MapUtilities {
                 : Optional.ofNullable(map.get(key));
     }
 
+
     /**
      * Similar to groupBy, however the valueFn runs over the entire group after the initial grouping
      * has been performed
+     * @param xs - initial values
      * @param keyFn  - extracts/derives the grouping key
      * @param valueFn - function which transforms each group
-     * @param xs - initial values
      * @param <K> - key type
      * @param <V> - (initial value type)
      * @param <V2> - resultant value type
      * @return a new map where elements of xs have been grouped by the key fn,
      *      the resultant group is then transformed using the valueFn.
      */
-    public static <K, V, V2> Map<K, V2> groupAndThen(Function<V, K> keyFn,
-                                                     Function<Collection<V>, V2> valueFn,
-                                                     Collection<V> xs) {
+    public static <K, V, V2> Map<K, V2> groupAndThen(Collection<V> xs,
+                                                     Function<V, K> keyFn,
+                                                     Function<Collection<V>, V2> valueFn) {
         checkNotNull(xs, "xs cannot be null");
         checkNotNull(keyFn, "keyFn cannot be null");
         checkNotNull(valueFn, "valueFn cannot be null");
@@ -280,5 +313,19 @@ public class MapUtilities {
         Map<K1, V> result = new HashMap<>();
         map1.forEach((key, value) -> result.put(key, map2.get(value)));
         return result;
+    }
+
+    /**
+     * @param maps list of maps to merge, later maps override where key is shared with earlier map
+     * @param <K>  Key of Map
+     * @param <V>  Value of Map
+     * @return new merged Map<K, V>
+     */
+    public static <K, V> Map<K, V> merge(Map<K, V>... maps) {
+        HashMap<K, V> newMap = newHashMap();
+        Stream.of(maps)
+                .forEach(newMap::putAll);
+
+        return newMap;
     }
 }

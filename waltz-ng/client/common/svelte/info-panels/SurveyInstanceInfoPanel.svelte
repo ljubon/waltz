@@ -13,43 +13,56 @@
     import {surveyInstanceStore} from "../../../svelte-stores/survey-instance-store";
     import ToastStore from "../../../svelte-stores/toast-store";
     import {displayError} from "../../error-utils";
-    import ViewLink from "../ViewLink.svelte";
 
     export let instanceId;
 
     function reload() {
-        surveyCall = surveyInstanceViewStore.getById(instanceId, true);
+        surveyCall = surveyInstanceViewStore.getInfoById(instanceId, true);
     }
 
     function updateSubmissionDueDate(d) {
         const updDate = d.detail;
-        surveyInstanceStore
-            .updateSubmissionDueDate(instanceId, updDate)
-            .then(() => ToastStore.success("Updated submission due date"))
-            .then(() => reload())
-            .catch(e => displayError("Failed to update submission due date", e));
+        let updatePromise = surveyInstanceStore.updateSubmissionDueDate(instanceId, updDate);
+
+        Promise.resolve(updatePromise)
+            .then(() => {
+                ToastStore.success("Updated submission due date");
+                return reload();
+            })
+            .catch(e => displayError("Failed to update submission due date and refresh page", e));
     }
 
     function updateApprovalDueDate(d) {
         const updDate = d.detail;
-        surveyInstanceStore
-            .updateApprovalDueDate(instanceId, updDate)
-            .then(() => ToastStore.success("Updated approval due date"))
-            .then(() => reload())
-            .catch(e => displayError("Failed to update approval due date", e));
+        let updatePromise = surveyInstanceStore.updateApprovalDueDate(instanceId, updDate);
+
+        Promise.resolve(updatePromise)
+            .then(() => {
+                ToastStore.success("Updated approval due date");
+                return reload();
+            })
+            .catch(e => displayError("Failed to update approval due date and refresh page", e));
     }
 
-    $: surveyCall = instanceId && surveyInstanceViewStore.getInfoById(instanceId);
-    $: survey = $surveyCall.data;
+    let surveyCall;
+    let permissionsCall;
 
-    $: permissionsCall = instanceId && surveyInstanceStore.getPermissions(instanceId);
-    $: permissions = $permissionsCall.data;
+    $: {
+        if (instanceId) {
+            surveyCall = surveyInstanceViewStore.getInfoById(instanceId);
+            permissionsCall = surveyInstanceStore.getPermissions(instanceId);
+        }
+    }
+
+    $: survey = $surveyCall?.data;
+    $: permissions = $permissionsCall?.data;
 
     $: surveyName = toSurveyName(survey);
 
     $: descContext = survey
         ? {entity: survey.surveyInstance.surveyEntity, instance: survey.surveyInstance}
         : null;
+
 </script>
 
 
@@ -61,12 +74,28 @@
     <table class="table table-condensed small">
         <tbody>
             <tr>
+                <td width="50%">Template Name</td>
+                <td width="50%">{survey.surveyTemplateRef?.name}</td>
+            </tr>
+            <tr>
                 <td width="50%">Run Name</td>
                 <td width="50%">{survey.surveyRun?.name}</td>
             </tr>
             <tr>
+                <td width="50%">Survey Contact</td>
+                <td width="50%">{survey.surveyRun?.contactEmail}</td>
+            </tr>
+            <tr>
                 <td width="50%">Subject</td>
-                <td width="50%"><EntityLink ref={survey.surveyInstance?.surveyEntity}/></td>
+                <td width="50%">
+                    <EntityLink ref={survey.surveyInstance?.surveyEntity}/>
+                </td>
+            </tr>
+            <tr>
+                <td width="50%">Issued On</td>
+                <td width="50%">
+                    <DatePicker origDate={survey.surveyInstance.issuedOn}/>
+                </td>
             </tr>
             <tr>
                 <td width="50%">Status</td>

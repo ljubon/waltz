@@ -20,7 +20,22 @@ package org.finos.waltz.model.physical_flow;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import org.finos.waltz.model.*;
+import org.finos.waltz.model.CreatedUserTimestampProvider;
+import org.finos.waltz.model.DescriptionProvider;
+import org.finos.waltz.model.EntityKind;
+import org.finos.waltz.model.EntityKindProvider;
+import org.finos.waltz.model.EntityLifecycleStatusProvider;
+import org.finos.waltz.model.EntityReference;
+import org.finos.waltz.model.ExternalIdProvider;
+import org.finos.waltz.model.FreshnessIndicator;
+import org.finos.waltz.model.IdProvider;
+import org.finos.waltz.model.ImmutableEntityReference;
+import org.finos.waltz.model.IsRemovedProvider;
+import org.finos.waltz.model.LastAttestedProvider;
+import org.finos.waltz.model.LastUpdatedProvider;
+import org.finos.waltz.model.Nullable;
+import org.finos.waltz.model.ProvenanceProvider;
+import org.finos.waltz.model.WaltzEntity;
 import org.immutables.value.Value;
 
 import java.util.Optional;
@@ -53,7 +68,10 @@ public abstract class PhysicalFlow implements
 
     public abstract long specificationId();
 
-    public abstract FrequencyKind frequency();
+    @Nullable
+    public abstract String name();
+
+    public abstract FrequencyKindValue frequency();
 
     // e.g. for representing T+0, T+1, T+7, T-1
     public abstract int basisOffset();
@@ -70,7 +88,7 @@ public abstract class PhysicalFlow implements
 
     public abstract Optional<Long> specificationDefinitionId();
 
-    public abstract Criticality criticality();
+    public abstract CriticalityValue criticality();
 
     @Value.Default
     public EntityKind kind() {

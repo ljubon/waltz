@@ -36,7 +36,7 @@ export function mkFlowClassificationRuleStore() {
         return remote
             .fetchViewData("GET", `api/flow-classification-rule/id/${id}`);
     }
-    
+
     const create = (cmd) => {
         checkIsFlowClassificationRuleCreateCommand(cmd);
         return remote.execute("POST", "api/flow-classification-rule", cmd)
@@ -44,7 +44,7 @@ export function mkFlowClassificationRuleStore() {
 
     const findCompanionAppRulesById = (id, force = false) => {
         return remote
-            .fetchViewList("GET", `api/flow-classification-rule/companion-rules/app/id/${id}`, null, {force})
+            .fetchViewList("GET", `api/flow-classification-rule/companion-rules/entity/id/${id}`, null, {force})
     }
 
     const findCompanionDataTypeRulesById = (id, force = false) => {
@@ -52,13 +52,26 @@ export function mkFlowClassificationRuleStore() {
             .fetchViewList("GET", `api/flow-classification-rule/companion-rules/data-type/id/${id}`, null, {force})
     }
 
+    const view = (opts, force = false) => {
+        return remote.fetchViewDatum("POST", "api/flow-classification-rule/view", opts, {force});
+    }
+
+    const remove = (ruleId) => {
+        return remote
+            .execute(
+                "DELETE",
+                `api/flow-classification-rule/id/${ruleId}`);
+    }
+
     return {
-        findAll,
         create,
-        update,
-        getById,
+        findAll,
         findCompanionAppRulesById,
-        findCompanionDataTypeRulesById
+        findCompanionDataTypeRulesById,
+        getById,
+        remove,
+        update,
+        view
     };
 }
 

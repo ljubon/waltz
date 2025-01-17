@@ -18,8 +18,6 @@
 
 package org.finos.waltz.service.changelog;
 
-import org.finos.waltz.common.CollectionUtilities;
-import org.finos.waltz.data.DBExecutorPoolInterface;
 import org.finos.waltz.data.EntityReferenceNameResolver;
 import org.finos.waltz.data.GenericSelector;
 import org.finos.waltz.data.GenericSelectorFactory;
@@ -27,6 +25,7 @@ import org.finos.waltz.data.application.ApplicationDao;
 import org.finos.waltz.data.changelog.ChangeLogDao;
 import org.finos.waltz.data.changelog.ChangeLogSummariesDao;
 import org.finos.waltz.data.logical_flow.LogicalFlowDao;
+import org.finos.waltz.data.measurable_rating.MeasurableRatingDao;
 import org.finos.waltz.data.measurable_rating_planned_decommission.MeasurableRatingPlannedDecommissionDao;
 import org.finos.waltz.data.measurable_rating_replacement.MeasurableRatingReplacementDao;
 import org.finos.waltz.data.physical_flow.PhysicalFlowDao;
@@ -36,21 +35,27 @@ import org.finos.waltz.model.changelog.ChangeLog;
 import org.finos.waltz.model.changelog.ImmutableChangeLog;
 import org.finos.waltz.model.external_identifier.ExternalIdValue;
 import org.finos.waltz.model.logical_flow.LogicalFlow;
+import org.finos.waltz.model.measurable_rating.MeasurableRating;
 import org.finos.waltz.model.measurable_rating_planned_decommission.MeasurableRatingPlannedDecommission;
 import org.finos.waltz.model.measurable_rating_replacement.MeasurableRatingReplacement;
 import org.finos.waltz.model.physical_flow.PhysicalFlow;
 import org.finos.waltz.model.physical_specification.PhysicalSpecification;
 import org.finos.waltz.model.tally.DateTally;
-import org.jooq.lambda.Unchecked;
+import org.jooq.DSLContext;
 import org.jooq.lambda.tuple.Tuple2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
-import java.util.concurrent.Future;
+
+import java.sql.Date;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 import static java.lang.String.format;
-import static org.finos.waltz.common.Checks.*;
+import static org.finos.waltz.common.Checks.checkNotEmpty;
+import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.common.SetUtilities.*;
 import static org.finos.waltz.model.EntityKind.*;
 import static org.finos.waltz.model.EntityReference.mkRef;
@@ -63,12 +68,12 @@ public class ChangeLogService {
 
     private final ChangeLogDao changeLogDao;
     private final ChangeLogSummariesDao changeLogSummariesDao;
-    private final DBExecutorPoolInterface dbExecutorPool;
     private final PhysicalFlowDao physicalFlowDao;
     private final LogicalFlowDao logicalFlowDao;
     private final PhysicalSpecificationDao physicalSpecificationDao;
     private final ApplicationDao applicationDao;
     private final MeasurableRatingReplacementDao measurableRatingReplacementdao;
+    private final MeasurableRatingDao measurableRatingDao;
     private final MeasurableRatingPlannedDecommissionDao measurableRatingPlannedDecommissionDao;
     private final EntityReferenceNameResolver nameResolver;
 
@@ -76,50 +81,64 @@ public class ChangeLogService {
     @Autowired
     public ChangeLogService(ChangeLogDao changeLogDao,
                             ChangeLogSummariesDao changeLogSummariesDao,
-                            DBExecutorPoolInterface dbExecutorPool,
                             PhysicalFlowDao physicalFlowDao,
                             PhysicalSpecificationDao physicalSpecificationDao,
                             LogicalFlowDao logicalFlowDao,
                             ApplicationDao applicationDao,
                             MeasurableRatingReplacementDao measurableRatingReplacementDao,
+                            MeasurableRatingDao measurableRatingdao,
                             MeasurableRatingPlannedDecommissionDao measurableRatingPlannedDecommissionDao,
                             EntityReferenceNameResolver nameResolver) {
         checkNotNull(changeLogDao, "changeLogDao must not be null");
         checkNotNull(changeLogSummariesDao, "changeLogSummariesDao must not be null");
-        checkNotNull(dbExecutorPool, "dbExecutorPool cannot be null");
         checkNotNull(physicalFlowDao, "physicalFlowDao cannot be null");
         checkNotNull(physicalSpecificationDao, "physicalSpecificationDao cannot be null");
         checkNotNull(logicalFlowDao, "logicalFlowDao cannot be null");
+        checkNotNull(measurableRatingdao, "measurableRatingdao cannot be null");
         checkNotNull(measurableRatingReplacementDao, "measurableRatingReplacementDao cannot be null");
         checkNotNull(measurableRatingPlannedDecommissionDao, "measurableRatingPlannedDecommissionDao cannot be null");
         checkNotNull(nameResolver, "nameResolver cannot be null");
 
         this.changeLogDao = changeLogDao;
         this.changeLogSummariesDao = changeLogSummariesDao;
-        this.dbExecutorPool = dbExecutorPool;
         this.physicalFlowDao = physicalFlowDao;
         this.physicalSpecificationDao = physicalSpecificationDao;
         this.logicalFlowDao = logicalFlowDao;
         this.applicationDao = applicationDao;
+        this.measurableRatingDao = measurableRatingdao;
         this.measurableRatingReplacementdao = measurableRatingReplacementDao;
         this.measurableRatingPlannedDecommissionDao = measurableRatingPlannedDecommissionDao;
         this.nameResolver = nameResolver;
     }
 
 
+    public List<ChangeLog> findByParentReferenceForDateRange(EntityReference ref,
+                                                             Date startDate,
+                                                             Date endDate,
+                                                             Optional<Integer> limit) {
+        checkNotNull(ref, "ref must not be null");
+        return changeLogDao.findByParentReferenceForDateRange(ref, startDate, endDate, limit);
+    }
+
+
+    public List<ChangeLog> findByPersonReferenceForDateRange(EntityReference ref,
+                                                             Date startDate,
+                                                             Date endDate,
+                                                             Optional<Integer> limit) {
+        checkNotNull(ref, "ref must not be null");
+        return changeLogDao.findByPersonReferenceForDateRange(ref, startDate, endDate, limit);
+    }
+
     public List<ChangeLog> findByParentReference(EntityReference ref,
-                                                 Optional<Date> date,
+                                                 Optional<java.util.Date> date,
                                                  Optional<Integer> limit) {
         checkNotNull(ref, "ref must not be null");
-        if(ref.kind() == EntityKind.PHYSICAL_FLOW) {
-            return findByParentReferenceForPhysicalFlow(ref, date, limit);
-        }
         return changeLogDao.findByParentReference(ref, date, limit);
     }
 
 
     public List<ChangeLog> findByPersonReference(EntityReference ref,
-                                                 Optional<Date> date,
+                                                 Optional<java.util.Date> date,
                                                  Optional<Integer> limit) {
         checkNotNull(ref, "ref must not be null");
         return changeLogDao.findByPersonReference(ref, date, limit);
@@ -134,7 +153,12 @@ public class ChangeLogService {
 
 
     public int write(ChangeLog changeLog) {
-        return changeLogDao.write(changeLog);
+        return changeLogDao.write(Optional.empty(), changeLog);
+    }
+
+
+    public int write(Optional<DSLContext> tx, ChangeLog changeLog) {
+        return changeLogDao.write(tx, changeLog);
     }
 
 
@@ -162,6 +186,10 @@ public class ChangeLogService {
                 PhysicalFlow physicalFlow = physicalFlowDao.getById(ref.id());
                 writeChangeLogEntries(physicalFlow, userId, postamble, operation);
                 break;
+            case PHYSICAL_SPECIFICATION:
+                PhysicalSpecification physicalSpec = physicalSpecificationDao.getById(ref.id());
+                writeChangeLogEntries(physicalSpec, userId, postamble, operation);
+                break;
             case LOGICAL_DATA_FLOW:
                 LogicalFlow logicalFlow = logicalFlowDao.getByFlowId(ref.id());
                 writeChangeLogEntries(logicalFlow, userId, postamble, operation);
@@ -184,7 +212,7 @@ public class ChangeLogService {
                                       Operation operation) {
         Tuple2<String, Set<EntityReference>> t = preparePreambleAndEntitiesForChangeLogs(logicalFlow);
         String message = format("%s: %s", t.v1, postamble);
-        writeChangeLogEntries(t.v2, message, operation, LOGICAL_DATA_FLOW, userId);
+        writeChangeLogEntries(t.v2, message, operation, logicalFlow.entityReference(), userId);
     }
 
 
@@ -194,7 +222,17 @@ public class ChangeLogService {
                                       Operation operation) {
         Tuple2<String, Set<EntityReference>> t = preparePreambleAndEntitiesForChangeLogs(physicalFlow);
         String message = format("%s: %s", t.v1, postamble);
-        writeChangeLogEntries(t.v2, message, operation, PHYSICAL_FLOW, userId);
+        writeChangeLogEntries(t.v2, message, operation, physicalFlow.entityReference(), userId);
+    }
+
+
+    public void writeChangeLogEntries(PhysicalSpecification physicalSpec,
+                                      String userId,
+                                      String postamble,
+                                      Operation operation) {
+        Tuple2<String, Set<EntityReference>> t = preparePreambleAndEntitiesForChangeLogs(physicalSpec);
+        String message = format("%s: %s", t.v1, postamble);
+        writeChangeLogEntries(t.v2, message, operation, physicalSpec.entityReference(), userId);
     }
 
     public void writeChangeLogEntries(MeasurableRatingReplacement measurableRatingReplacement,
@@ -224,33 +262,6 @@ public class ChangeLogService {
         return changeLogSummariesDao.findCountByDateForParentKindBySelector(genericSelector, limit);
     }
 
-        ////////////////////// PRIVATE HELPERS //////////////////////////////////////////
-
-    private List<ChangeLog> findByParentReferenceForPhysicalFlow(EntityReference ref,
-                                                                 Optional<Date> date,
-                                                                 Optional<Integer> limit) {
-        checkNotNull(ref, "ref must not be null");
-        checkTrue(ref.kind() == EntityKind.PHYSICAL_FLOW, "ref should refer to a Physical Flow");
-
-        Future<List<ChangeLog>> flowLogsFuture = dbExecutorPool.submit(() -> changeLogDao.findByParentReference(ref, date, limit));
-
-        Future<List<ChangeLog>> specLogsFuture = dbExecutorPool.submit(() -> {
-            PhysicalFlow flow = physicalFlowDao.getById(ref.id());
-            return changeLogDao.findByParentReference(mkRef(EntityKind.PHYSICAL_SPECIFICATION, flow.specificationId()), date, limit);
-        });
-
-        return Unchecked.supplier(() -> {
-            List<ChangeLog> flowLogs = flowLogsFuture.get();
-            List<ChangeLog> specLogs = specLogsFuture.get();
-            List<ChangeLog> all = new ArrayList<>();
-            all.addAll(flowLogs);
-            all.addAll(specLogs);
-            return CollectionUtilities.sort(
-                    all,
-                    Comparator.comparing(ChangeLog::createdAt).reversed());
-        }).get();
-    }
-
 
     private void writeChangeLogEntries(Set<EntityReference> refs,
                                        String message,
@@ -269,7 +280,45 @@ public class ChangeLogService {
                         .operation(operation)
                         .build());
 
-        write(changeLogEntries);
+        changeLogDao.write(changeLogEntries);
+    }
+
+
+    private void writeChangeLogEntries(Set<EntityReference> refs,
+                                       String message,
+                                       Operation operation,
+                                       EntityReference childRef,
+                                       String userId) {
+        Set<ChangeLog> changeLogEntries = map(
+                refs,
+                r -> ImmutableChangeLog
+                        .builder()
+                        .parentReference(r)
+                        .message(message)
+                        .severity(Severity.INFORMATION)
+                        .userId(userId)
+                        .childKind(childRef.kind())
+                        .childId(childRef.id())
+                        .operation(operation)
+                        .build());
+
+        changeLogDao.write(changeLogEntries);
+    }
+
+
+    private Tuple2<String, Set<EntityReference>> preparePreambleAndEntitiesForChangeLogs(PhysicalSpecification physicalSpec) {
+        List<PhysicalFlow> physicalFlows = physicalFlowDao.findBySpecificationId(physicalSpec.id().get());
+
+        String messagePreamble = format(
+                "Physical spec: %s",
+                physicalSpec.name());
+
+        return tuple(
+                messagePreamble,
+                union(
+                    map(physicalFlows, PhysicalFlow::entityReference),
+                    asSet(physicalSpec.entityReference())));
+
     }
 
 
@@ -313,8 +362,9 @@ public class ChangeLogService {
     private Tuple2<String, Set<EntityReference>> preparePreambleAndEntitiesForChangeLogs(MeasurableRatingReplacement measurableRatingReplacement) {
 
         MeasurableRatingPlannedDecommission plannedDecommission = measurableRatingPlannedDecommissionDao.getById(measurableRatingReplacement.decommissionId());
-        String measurableName = resolveName(plannedDecommission.measurableId(), MEASURABLE);
-        String originalEntityName = resolveName(plannedDecommission.entityReference().id(), plannedDecommission.entityReference().kind());
+        MeasurableRating rating = measurableRatingDao.getById(plannedDecommission.measurableRatingId());
+        String measurableName = resolveName(rating.measurableId(), MEASURABLE);
+        String originalEntityName = resolveName(rating.entityReference().id(), rating.entityReference().kind());
         String newEntityName = resolveName(measurableRatingReplacement.entityReference().id(), measurableRatingReplacement.entityReference().kind());
 
         String messagePreamble = format(
@@ -323,28 +373,29 @@ public class ChangeLogService {
                 newEntityName,
                 measurableRatingReplacement.entityReference().id(),
                 measurableName,
-                plannedDecommission.measurableId(),
+                rating.measurableId(),
                 originalEntityName,
-                plannedDecommission.entityReference().id());
+                rating.entityReference().id());
 
         return tuple(
                 messagePreamble,
-                asSet(measurableRatingReplacement.entityReference(), plannedDecommission.entityReference()));
+                asSet(measurableRatingReplacement.entityReference(), rating.entityReference()));
 
     }
 
 
     private Tuple2<String, Set<EntityReference>> preparePreambleAndEntitiesForChangeLogs(MeasurableRatingPlannedDecommission measurableRatingPlannedDecommission) {
 
+        MeasurableRating rating = measurableRatingDao.getById(measurableRatingPlannedDecommission.measurableRatingId());
         Set<MeasurableRatingReplacement> replacements = measurableRatingReplacementdao.fetchByDecommissionId(measurableRatingPlannedDecommission.id());
-        String measurableName = resolveName(measurableRatingPlannedDecommission.measurableId(), MEASURABLE);
-        EntityReference entityReference = measurableRatingPlannedDecommission.entityReference();
+        String measurableName = resolveName(rating.measurableId(), MEASURABLE);
+        EntityReference entityReference = rating.entityReference();
         String entityName = resolveName(entityReference.id(), entityReference.kind());
 
         String messagePreamble = format(
                 "Measurable Rating: %s [%d] on: %s [%s]",
                 measurableName,
-                measurableRatingPlannedDecommission.measurableId(),
+                rating.measurableId(),
                 entityName,
                 getExternalId(entityReference)
                         .map(ExternalIdValue::value)

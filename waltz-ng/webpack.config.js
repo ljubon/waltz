@@ -32,6 +32,14 @@ module.exports = {
         path: path.join(basePath, "/dist"),
         filename: "[name].[contenthash].js"
     },
+    target: ["web", "es5"],
+    ignoreWarnings: [
+        {
+            module: /cjs\.js/
+        },{
+            module: /SimpleAutocomplete\.svelte/
+        }
+    ],
     resolve: {
         symlinks: false,
         alias: {
@@ -47,7 +55,7 @@ module.exports = {
             minSize: 30000,
             maxSize: 600000,
             minChunks: 1,
-            name: true,
+            name: false,
             cacheGroups: {
                 vendors: {
                     test: /[\\/]node_modules[\\/]/,
@@ -88,7 +96,7 @@ module.exports = {
                     {
                         loader: "svelte-loader",
                         options: {
-                            preprocess: require('svelte-preprocess')({
+                            preprocess: require("svelte-preprocess")({
                                 // postcss: true
                             }),
                             emitCss: true,
@@ -111,20 +119,11 @@ module.exports = {
                     },
                     "style-loader",
                     "css-loader",
-                    "sass-loader"]
+                    "sass-loader"
+                ]
             }, {
-                test: /\.(ttf|eot|svg|woff(2)?)(\?v=[0-9]\.[0-9]\.[0-9])?$/,
-                loader: "url-loader",
-                options: {
-                    limit: 8192
-                }
-            }, {
-                test: /\.png$/,
-                loader: "file-loader",
-                options: {
-                    mimetype: "image/png",
-                    limit: 16384
-                }
+                test: /\.(jpe?g|svg|png|gif|ico|eot|ttf|woff2?)(\?v=\d+\.\d+\.\d+)?$/i,
+                type: "asset/resource",
             }, {
                 test: /\.html?$/,
                 exclude: /node_modules/,

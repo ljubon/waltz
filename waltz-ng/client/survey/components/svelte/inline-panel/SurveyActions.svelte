@@ -54,17 +54,17 @@
 
         // SHOW MESSAGE
 
-        const updateCmd = {action: name, reason: reason};
+        const updateCmd = {action: name, reason};
 
         return Promise
-                .resolve(surveyInstanceStore.updateStatus(surveyInstanceId, updateCmd))
-                .then(() => {
-                    toasts.success("Survey response " + verb + " successfully");
-                    findPossibleActionsCall = surveyInstanceStore.findPossibleActions(surveyInstanceId, true);
-                    dispatch("action", surveyInstanceId);
-                    onCancelAction();
-                })
-                .catch(e => displayError("Unable to update status of survey. " + e.error, e));
+            .resolve(surveyInstanceStore.updateStatus(surveyInstanceId, updateCmd))
+            .then(() => {
+                toasts.success("Survey response " + verb + " successfully");
+                findPossibleActionsCall = surveyInstanceStore.findPossibleActions(surveyInstanceId, true);
+                dispatch("action", surveyInstanceId);
+                onCancelAction();
+            })
+            .catch(e => displayError("Unable to update status of survey. " + e.error, e));
     }
 
     function mkConfirmationKey(templateExtId, surveyAction) {
@@ -169,7 +169,7 @@
     </div>
 
     <form autocomplete="off"
-          on:submit|preventDefault={() => invokeAction(activeAction, instanceId)}>
+          on:submit|preventDefault={() => invokeAction(activeAction, instanceId, reason)}>
 
         <!-- CONFIRMATION REASON ? -->
         {#if activeAction.confirmationRequirement === "CONFIRM_AND_COMMENT_REQUIRED"}

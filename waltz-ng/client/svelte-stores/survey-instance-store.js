@@ -28,22 +28,28 @@ export function mkSurveyInstanceStore() {
         .fetchViewList("GET", `api/survey-instance/${id}/actions`, [], {force});
 
     const findRecipients = (id, force = false) => remote
-        .fetchViewList("GET",`api/survey-instance/${id}/recipients`, null, {force});
+        .fetchViewList("GET", `api/survey-instance/${id}/recipients`, null, {force});
 
     const findOwners = (id, force = false) => remote
-        .fetchViewList("GET",`api/survey-instance/${id}/owners`, null, {force});
+        .fetchViewList("GET", `api/survey-instance/${id}/owners`, null, {force});
+
+    const findGroupApprovers = (id, force = false) => remote
+        .fetchViewList("GET", `api/survey-instance/${id}/group-approvers`, null, {force});
 
     const findResponses = (id) => remote
-        .fetchViewList("GET",`api/survey-instance/${id}/responses`);
+        .fetchViewList("GET", `api/survey-instance/${id}/responses`);
 
     const findPreviousVersions = (originalId) => remote
         .fetchViewList("GET", `api/survey-instance/id/${originalId}/previous-versions`);
 
-
     const findVersions = (originalId, force = false) => remote
         .fetchViewList("GET", `api/survey-instance/id/${originalId}/versions`, null, {force});
 
+    const findByRecipientId = (personId, force = false) => remote
+        .fetchViewList("GET", `api/survey-instance/recipient/id/${personId}`, null, {force});
 
+    const findByEntityReference = (ref, force = false) => remote
+        .fetchViewList("GET", `api/survey-instance/entity/${ref.kind}/${ref.id}`, null, {force});
 
     const updateStatus = (id, command) => remote
         .execute("PUT",`api/survey-instance/${id}/status`, command);
@@ -61,13 +67,39 @@ export function mkSurveyInstanceStore() {
         .execute("POST", `api/survey-instance/${surveyInstanceId}/owner`, personId);
 
     const updateSubmissionDueDate = (id, updDate) => remote
-        .execute("PUT",`api/survey-instance/${id}/submission-due-date`, toLocalDate(updDate));
+        .execute("PUT", `api/survey-instance/${id}/submission-due-date`, toLocalDate(updDate));
 
     const updateApprovalDueDate = (id, updDate) => remote
-        .execute("PUT",`api/survey-instance/${id}/approval-due-date`, toLocalDate(updDate));
+        .execute("PUT", `api/survey-instance/${id}/approval-due-date`, toLocalDate(updDate));
 
     const copyResponses = (id, copyCmd) => remote
-        .execute("POST",`api/survey-instance/${id}/copy-responses`, copyCmd);
+        .execute("POST", `api/survey-instance/${id}/copy-responses`, copyCmd);
+
+    const reassignRecipients = () => remote
+        .execute(
+            "POST",
+            "api/survey-instance/reassign-recipients",
+            null);
+
+    const getReassignRecipientsCounts = (force = false) => remote
+        .fetchViewDatum(
+            "GET",
+            "api/survey-instance/reassign-recipients-counts",
+            null,
+            {force});
+
+    const reassignOwners = () => remote
+        .execute(
+            "POST",
+            "api/survey-instance/reassign-owners",
+            null);
+
+    const getReassignOwnersCounts = (force = false) => remote
+        .fetchViewDatum(
+            "GET",
+            "api/survey-instance/reassign-owners-counts",
+            null,
+            {force});
 
 
     return {
@@ -78,15 +110,21 @@ export function mkSurveyInstanceStore() {
         findOwners,
         findPossibleActions,
         findRecipients,
+        findGroupApprovers,
         findResponses,
         findPreviousVersions,
         findVersions,
+        findByRecipientId,
+        findByEntityReference,
         getPermissions,
         updateStatus,
         updateSubmissionDueDate,
         updateApprovalDueDate,
-        copyResponses
-
+        copyResponses,
+        reassignRecipients,
+        getReassignRecipientsCounts,
+        reassignOwners,
+        getReassignOwnersCounts
     };
 }
 

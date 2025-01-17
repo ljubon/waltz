@@ -1,52 +1,61 @@
 package org.finos.waltz.common;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import static java.util.Collections.emptyList;
 import static java.util.function.Function.identity;
-import static org.junit.Assert.assertEquals;
+import static org.finos.waltz.common.ListUtilities.newArrayList;
+import static org.finos.waltz.common.MapUtilities.groupAndThen;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MapUtilities_groupAndThenTest {
     @Test
     public void simpleGroupAndThen() {
-        List<String> xs = ListUtilities.newArrayList("aa", "bb", "b" );
-        Map<Object, Collection<String>> result = MapUtilities.groupAndThen(x ->  xs.indexOf(x), identity(), xs);
+        List<String> xs = newArrayList("aa", "bb", "b" );
+        Map<Object, Collection<String>> result = groupAndThen(xs, xs::indexOf, identity());
         assertEquals(3, result.size());
-        assertEquals(ListUtilities.newArrayList("aa"), result.get(0));
-        assertEquals(ListUtilities.newArrayList("bb"), result.get(1));
-        assertEquals(ListUtilities.newArrayList("b"), result.get(2));
+        assertEquals(newArrayList("aa"), result.get(0));
+        assertEquals(newArrayList("bb"), result.get(1));
+        assertEquals(newArrayList("b"), result.get(2));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+
+    @Test
     public void groupAndThenWithNullList() {
-        MapUtilities.groupAndThen(x ->  x, identity(), null);
+        assertThrows(IllegalArgumentException.class,
+                () -> groupAndThen(null, x -> x, identity()));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+
+    @Test
     public void groupAndThenWithNullValueFn() {
-        List<String> xs = ListUtilities.newArrayList("aa", "bb", "b" );
-        MapUtilities.groupAndThen(x ->  x, null, xs);
+        assertThrows(IllegalArgumentException.class,
+                () -> groupAndThen(emptyList(), x -> x, null));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+
+    @Test
     public void groupAndThenWithNullKeyFn() {
-        List<String> xs = ListUtilities.newArrayList("aa", "bb", "b" );
-        MapUtilities.groupAndThen(null, identity(), xs);
+        assertThrows(IllegalArgumentException.class,
+                () -> groupAndThen(emptyList(), null, identity()));
     }
 
-   @Test(expected = IllegalArgumentException.class)
+
+    @Test
     public void groupAndThenWithAllNull() {
-        List<String> xs = null;
-        MapUtilities.groupAndThen(null, null, xs);
+        assertThrows(IllegalArgumentException.class,
+                () -> groupAndThen(null, null, null));
     }
 
-     @Test
+
+    @Test
     public void groupAndThenWithEmptyList() {
-        List<String> xs = ListUtilities.newArrayList();
-         Map<Object, Collection<String>> result = MapUtilities.groupAndThen(x ->  x, identity(), xs);
+        Map<Object, Collection<String>> result = groupAndThen(emptyList(), x ->  x, identity());
         assertEquals(0, result.size());
     }
 }

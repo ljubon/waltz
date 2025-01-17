@@ -1,5 +1,6 @@
 <script>
     import EntityIcon from "./EntityIcon.svelte";
+    import _ from "lodash";
 
     export let ref;
     export let showIcon = true;
@@ -16,7 +17,8 @@
 {#if showIcon}
     <EntityIcon kind={ref?.kind}/>
 {/if}
-<span class:removed={ref?.entityLifecycleStatus === 'REMOVED' || ref?.isRemoved}>
+<span class:removed={ref?.entityLifecycleStatus === 'REMOVED' || ref?.isRemoved}
+      class="force-wrap">
     {name}
 </span>
 

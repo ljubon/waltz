@@ -98,7 +98,8 @@ export function doSearch(termStr = "", searchNodes = []) {
  * @returns {Array}
  */
 export function populateParents(nodes, parentsAsRefs = true) {
-    const byId = _.chain(_.cloneDeep(nodes))
+    const byId = _
+        .chain(_.cloneDeep(nodes))
         .map(u => _.merge(u, { children: [], parent: null }))
         .keyBy("id")
         .value();
@@ -181,7 +182,7 @@ export function groupHierarchyByKey(tree = [], keyFn = n => n.id, acc = {}) {
 
 
 export function flattenChildren(node, acc = []) {
-    _.forEach(node.children || [], child => {
+    _.forEach(node?.children || [], child => {
         acc.push(child);
         flattenChildren(child, acc);
     });
@@ -236,4 +237,106 @@ export function getParents(node, getParentFn = (n) => n.parent) {
     }
 
     return result;
+}
+
+
+/**
+ * A naive approach to limiting the depth/number of nodes to draw in a tree.
+ * If the number of nodes is too high performance suffers.  Limiting the
+ * expanded tree depth helps keep the rendered node count down.
+ *
+ * The values were determined by simple experimentation.
+ *
+ * @param numNodes
+ * @returns {number}
+ */
+export function determineDepthLimit(numNodes) {
+    if (numNodes > 1000) return 1;
+    if (numNodes > 600) return 2;
+    if (numNodes > 200) return 3;
+    return 100;
+}
+
+
+/**
+ * Takes a hierarchy and a max depth and returns the set of nodes needed
+ * to fully expand the tree.
+ *
+ * - leaf nodes are not included as they do not need to be expanded
+ * - we optionally limit the depth of the tree to (hopefully) prevent large numbers of nodes
+ *
+ * @param hierarchy
+ * @param maxDepth
+ * @returns {*}
+ */
+export function determineExpandedNodes(hierarchy, maxDepth = 100) {
+    const shouldHalt = (n, currDepth) =>
+        _.isEmpty(n.children) // we don't care about leaf nodes, they don't need expanding
+        || currDepth > (maxDepth - 1); // we knock 1 off as we are expanding this node, effectively giving us depth + 1
+
+    const walk = (n, currDepth = 0) => shouldHalt(n, currDepth)
+        ? []
+        : _
+            .chain(n.children)
+            .map(c => walk(c, currDepth + 1)) // recurse
+            .flatten()
+            .concat([n])
+            .value();
+
+    return _
+        .chain(hierarchy)   // do the walk for each tree in the forest
+        .map(n => walk(n, 0))
+        .concat()
+        .flatten()
+        .value();
+}
+
+
+/**
+ * Given a list of flat nodes and a starting node id will return the direct lineage of the
+ * tree with all parents and children of the starting node populated.  All other
+ * nodes are omitted.
+ *
+ * @param flatNodes  starting list of nodes
+ * @param nodeId  starting node id
+ * @param idFn  optional accessor for getting the node id (defaults to n=>n.id)
+ * @param parentIdFn  optional accessor for getting the parent node id (defaults to n=>n.parentId)
+ * @returns {*}  node at the top of the sliver, each node may have parent and children attributes populated
+ */
+export function directLineage(flatNodes,
+                              nodeId,
+                              idFn = n => n.id,
+                              parentIdFn = n => n.parentId) {
+    const cleanFlatNodes = _.map(flatNodes, n => Object.assign({}, n, {children: []}))
+    const byId = _.keyBy(cleanFlatNodes, idFn);
+    const byParentId = _.groupBy(cleanFlatNodes, parentIdFn);
+
+    const start = byId[nodeId];
+
+    // parents
+    let parent = byId[parentIdFn(start)];
+    let ptr = start;
+    while(parent != null) {
+        ptr.parent = parent;
+        parent.children = [ptr];
+        ptr = parent;
+        parent = byId[parentIdFn(parent)];
+    }
+
+    // recursively populate children
+    const recurse = (node) => {
+        const kids = byParentId[idFn(node)] || [];
+        if (kids) {
+            node.children = kids;
+            _.each(kids, recurse);
+        }
+    }
+    recurse(start);
+
+    // find head
+    let head = start;
+    while (head.parent != null) {
+        head = head.parent;
+    }
+    return head;
 }

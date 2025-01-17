@@ -33,7 +33,7 @@
         <h2>
             <Icon name={icon}/>
 
-            <span>{truncateMiddle(name, 50)}</span>
+            <span title={name}>{truncateMiddle(name, 70)}</span>
             <small>{small}</small>
 
             <slot name="actions"/>
@@ -41,14 +41,15 @@
     </div>
 
     <div class="header-sticky"
-         class:stickyVisible
-         on:click={() => pageY = 0}>
-
-        <h2 class="clickable">
-            <Icon name={icon}/>
-            <span>{name}</span>
-            <small>{small}</small>
-        </h2>
+         class:stickyVisible>
+        <button class="btn-skinny"
+                on:click={() => pageY = 0}>
+            <h2 class="clickable">
+                <Icon name={icon}/>
+                <span>{name}</span>
+                <small>{small}</small>
+            </h2>
+        </button>
     </div>
 
     {#if $$slots.summary}

@@ -19,19 +19,23 @@
 import template from "./report-grid-view-section.html";
 import {initialiseData} from "../../../common";
 import {mkSelectionOptions} from "../../../common/selector-utils";
-import {CORE_API} from "../../../common/services/core-api-utils";
 import _ from "lodash";
 import ReportGridControlPanel from "../svelte/ReportGridControlPanel.svelte";
-import {activeSummaryColRefs, filters, selectedGrid, columnDefs} from "../svelte/report-grid-store";
-import {mkPropNameForRef, mkRowFilter, prepareColumnDefs, prepareTableData} from "../svelte/report-grid-utils";
+import {combineColDefs, mkLocalStorageFilterKey, prepareColumnDefs} from "../svelte/report-grid-utils";
 import {displayError} from "../../../common/error-utils";
+import {coalesceFns} from "../../../common/function-utils";
+import {gridService} from "../svelte/report-grid-service";
+import {showGridSelector} from "../svelte/report-grid-ui-service";
+
 
 const bindings = {
     parentEntityRef: "<",
+    selectedGridId: "<?"
 };
 
 const initData = {
-    ReportGridControlPanel
+    ReportGridControlPanel,
+    showGridSelector: true
 };
 
 const localStorageKey = "waltz-report-grid-view-section-last-id";
@@ -40,104 +44,79 @@ function controller($scope, serviceBroker, localStorageService) {
 
     const vm = initialiseData(this, initData);
 
-    function refresh(filters = []) {
+    function getSummaryColumnsFromLocalStorage(gridData) {
 
-        vm.columnDefs = _.map(vm.allColumnDefs, cd => {
-            if (cd.allowSummary){
-                return Object.assign(cd, { menuItems: [
-                    {
-                        title: "Add to summary",
-                        icon: "ui-grid-icon-info-circled",
-                        action: function() {
-                            vm.onAddSummary(cd);
-                        },
-                        context: vm
-                    }
-                ]})
-            } else {
-                return cd;
-            }
-        });
+        const key = mkLocalStorageFilterKey(gridData?.definition.id);
+        const value = localStorage.getItem(key);
 
-        const rowFilter = mkRowFilter(filters);
-
-        const workingTableData =  _.map(
-            vm.allTableData,
-            d => Object.assign({}, d, { visible: rowFilter(d) }));
-
-        vm.tableData = _.filter(workingTableData, d => d.visible);
+        try {
+            return JSON.parse(value)
+        } catch (e) {
+            console.log("Cannot parse local storage value", { e, key, value });
+            return [];
+        }
     }
 
-    function loadGridData() {
-        serviceBroker
-            .loadViewData(
-                CORE_API.ReportGridStore.getViewById,
-                [vm.gridId, mkSelectionOptions(vm.parentEntityRef)], {force: true})
-            .then(r => {
-                vm.loading = false;
-                vm.rawGridData = r.data;
 
-                selectedGrid.set(r.data);
-                columnDefs.set(r.data.definition.columnDefinitions);
+    function getSummaryColumns(gridData) {
+        return coalesceFns(
+            () => getSummaryColumnsFromLocalStorage(gridData),
+            () => []);
+    }
 
-                vm.allTableData = prepareTableData(vm.rawGridData);
-                vm.allColumnDefs = prepareColumnDefs(vm.rawGridData);
-                refresh();
+
+    function loadGridData(selectedGridId, selectionOptions) {
+        vm.loading = true;
+        gridService.selectGrid(selectedGridId, selectionOptions)
+            .catch(e => displayError("Could not load grid data for id: " + vm.gridId, e))
+            .finally(() => vm.loading = false);
+    }
+
+    const unsubTableData = gridService.tableData.subscribe((td) => {
+        $scope.$applyAsync(
+            () => {
+                vm.tableData = _.filter(td, d => d.visible);
             })
-            .catch(e => {
-                displayError("Could not load grid data for id: " + vm.gridId, e)
-                vm.loading = false;
-            });
+    });
+
+    const unsubColDefs = gridService.gridDefinition.subscribe((definition) => {
+        $scope.$applyAsync(() => {
+            vm.gridDefinition = definition;
+            const cols = combineColDefs(definition);
+            vm.allColumnDefs = prepareColumnDefs(cols);
+        })
+    });
+
+    vm.$onDestroy = () => {
+        unsubTableData();
+        unsubColDefs();
     }
 
     vm.$onChanges = () => {
 
-        const lastUsedGridId = localStorageService.get(localStorageKey);
+        if (vm.parentEntityRef) {
 
-        if (! vm.parentEntityRef) return;
-
-        if (lastUsedGridId) {
-            vm.gridId = lastUsedGridId;
             vm.selectionOptions = mkSelectionOptions(vm.parentEntityRef);
-            vm.loading = true;
-            loadGridData();
+            const lastUsedGridId = localStorageService.get(localStorageKey);
+
+            showGridSelector.set(true);
+
+            if (!_.isNil(vm.selectedGridId)) {
+                loadGridData(vm.selectedGridId, vm.selectionOptions);
+                showGridSelector.set(false);
+            } else if (lastUsedGridId) {
+                loadGridData(lastUsedGridId, vm.selectionOptions);
+            }
         }
     };
 
     vm.onGridSelect = (grid) => {
-        if (! grid) {
+        if (!grid) {
             return;
         }
-        $scope.$applyAsync(() => {
-            localStorageService.set(localStorageKey, grid.id);
-            vm.gridId = grid.id;
-            loadGridData();
-        });
+        localStorageService.set(localStorageKey, grid.gridId);
+        loadGridData(grid.gridId, vm.selectionOptions);
     };
-
-    vm.onAddSummary = (c) => {
-        const colRef = mkPropNameForRef(c.columnDef.columnEntityReference);
-        const newActiveList = _.concat(vm.summaryCols, [colRef]);
-        activeSummaryColRefs.set(newActiveList);
-    };
-
-    vm.onUpdateColumns = () => {
-        loadGridData();
-    };
-
-    filters.subscribe((f) => {
-        $scope.$applyAsync(() => {
-            if(vm.rawGridData){
-                refresh(f)
-            }
-        });
-    })
-
-    activeSummaryColRefs.subscribe((d) => {
-        $scope.$applyAsync(() => {
-            vm.summaryCols = d;
-        });
-    })
 
 }
 

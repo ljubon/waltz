@@ -18,12 +18,26 @@
 
 package org.finos.waltz.data.logical_flow;
 
-import org.finos.waltz.schema.tables.records.LogicalFlowRecord;
 import org.finos.waltz.data.InlineSelectFieldFactory;
-import org.finos.waltz.model.*;
+import org.finos.waltz.model.EntityKind;
+import org.finos.waltz.model.EntityLifecycleStatus;
+import org.finos.waltz.model.EntityReference;
+import org.finos.waltz.model.ImmutableEntityReference;
+import org.finos.waltz.model.Operation;
+import org.finos.waltz.model.UserTimestamp;
 import org.finos.waltz.model.logical_flow.ImmutableLogicalFlow;
 import org.finos.waltz.model.logical_flow.LogicalFlow;
-import org.jooq.*;
+import org.finos.waltz.model.user.SystemRole;
+import org.finos.waltz.schema.tables.records.LogicalFlowRecord;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Record;
+import org.jooq.Record1;
+import org.jooq.RecordMapper;
+import org.jooq.Select;
+import org.jooq.SelectJoinStep;
+import org.jooq.UpdateConditionStep;
 import org.jooq.impl.DSL;
 import org.jooq.lambda.tuple.Tuple2;
 import org.slf4j.Logger;
@@ -32,15 +46,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
-import static org.finos.waltz.schema.Tables.PHYSICAL_SPECIFICATION;
-import static org.finos.waltz.schema.tables.Application.APPLICATION;
-import static org.finos.waltz.schema.tables.LogicalFlow.LOGICAL_FLOW;
 import static java.util.Optional.ofNullable;
-import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toSet;
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.common.CollectionUtilities.map;
 import static org.finos.waltz.common.DateTimeUtilities.nowUtc;
@@ -49,9 +65,15 @@ import static org.finos.waltz.common.ListUtilities.filter;
 import static org.finos.waltz.common.ListUtilities.newArrayList;
 import static org.finos.waltz.common.MapUtilities.groupBy;
 import static org.finos.waltz.common.MapUtilities.indexBy;
+import static org.finos.waltz.common.SetUtilities.asSet;
+import static org.finos.waltz.common.SetUtilities.union;
 import static org.finos.waltz.data.application.ApplicationDao.IS_ACTIVE;
 import static org.finos.waltz.model.EntityLifecycleStatus.ACTIVE;
 import static org.finos.waltz.model.EntityLifecycleStatus.REMOVED;
+import static org.finos.waltz.schema.Tables.PHYSICAL_SPECIFICATION;
+import static org.finos.waltz.schema.Tables.USER_ROLE;
+import static org.finos.waltz.schema.tables.Application.APPLICATION;
+import static org.finos.waltz.schema.tables.LogicalFlow.LOGICAL_FLOW;
 import static org.jooq.lambda.tuple.Tuple.tuple;
 
 
@@ -63,13 +85,23 @@ public class LogicalFlowDao {
     private static final Field<String> SOURCE_NAME_FIELD = InlineSelectFieldFactory.mkNameField(
             LOGICAL_FLOW.SOURCE_ENTITY_ID,
             LOGICAL_FLOW.SOURCE_ENTITY_KIND,
-            newArrayList(EntityKind.APPLICATION, EntityKind.ACTOR));
+            newArrayList(EntityKind.APPLICATION, EntityKind.ACTOR, EntityKind.END_USER_APPLICATION));
 
 
     private static final Field<String> TARGET_NAME_FIELD = InlineSelectFieldFactory.mkNameField(
             LOGICAL_FLOW.TARGET_ENTITY_ID,
             LOGICAL_FLOW.TARGET_ENTITY_KIND,
-            newArrayList(EntityKind.APPLICATION, EntityKind.ACTOR));
+            newArrayList(EntityKind.APPLICATION, EntityKind.ACTOR, EntityKind.END_USER_APPLICATION));
+
+    private static final Field<String> SOURCE_EXTERNAL_ID_FIELD = InlineSelectFieldFactory.mkExternalIdField(
+            LOGICAL_FLOW.SOURCE_ENTITY_ID,
+            LOGICAL_FLOW.SOURCE_ENTITY_KIND,
+            newArrayList(EntityKind.APPLICATION, EntityKind.ACTOR, EntityKind.END_USER_APPLICATION));
+
+    private static final Field<String> TARGET_EXTERNAL_ID_FIELD = InlineSelectFieldFactory.mkExternalIdField(
+            LOGICAL_FLOW.TARGET_ENTITY_ID,
+            LOGICAL_FLOW.TARGET_ENTITY_KIND,
+            newArrayList(EntityKind.APPLICATION, EntityKind.ACTOR, EntityKind.END_USER_APPLICATION));
 
 
     public static final RecordMapper<Record, LogicalFlow> TO_DOMAIN_MAPPER = r -> {
@@ -77,15 +109,18 @@ public class LogicalFlowDao {
 
         return ImmutableLogicalFlow.builder()
                 .id(record.getId())
+                .externalId(record.getExternalId())
                 .source(ImmutableEntityReference.builder()
                         .kind(EntityKind.valueOf(record.getSourceEntityKind()))
                         .id(record.getSourceEntityId())
                         .name(ofNullable(r.getValue(SOURCE_NAME_FIELD)))
+                        .externalId(ofNullable(r.getValue(SOURCE_EXTERNAL_ID_FIELD)))
                         .build())
                 .target(ImmutableEntityReference.builder()
                         .kind(EntityKind.valueOf(record.getTargetEntityKind()))
                         .id(record.getTargetEntityId())
                         .name(ofNullable(r.getValue(TARGET_NAME_FIELD)))
+                        .externalId(ofNullable(r.getValue(TARGET_EXTERNAL_ID_FIELD)))
                         .build())
                 .entityLifecycleStatus(readEnum(record.getEntityLifecycleStatus(), EntityLifecycleStatus.class, s -> EntityLifecycleStatus.ACTIVE))
                 .lastUpdatedBy(record.getLastUpdatedBy())
@@ -116,6 +151,7 @@ public class LogicalFlowDao {
         record.setCreatedBy(flow.created().map(UserTimestamp::by).orElse(flow.lastUpdatedBy()));
         record.setIsReadonly(flow.isReadOnly());
         record.setIsRemoved(flow.isRemoved());
+        flow.externalId().ifPresent(record::setExternalId);
         return record;
     };
 
@@ -132,6 +168,13 @@ public class LogicalFlowDao {
     public LogicalFlowDao(DSLContext dsl) {
         checkNotNull(dsl, "dsl must not be null");
         this.dsl = dsl;
+    }
+
+
+    public LogicalFlow getByFlowExternalId(String externalId) {
+        return baseQuery()
+                .where(LOGICAL_FLOW.EXTERNAL_ID.eq(externalId))
+                .fetchOne(TO_DOMAIN_MAPPER);
     }
 
 
@@ -216,7 +259,7 @@ public class LogicalFlowDao {
     }
 
 
-    public List<LogicalFlow> addFlows(List<LogicalFlow> flows, String user) {
+    public Set<LogicalFlow> addFlows(Set<LogicalFlow> flows, String user) {
 
         Condition condition = flows
                 .stream()
@@ -241,7 +284,7 @@ public class LogicalFlowDao {
                 existingFlows,
                 f -> tuple(f.source(), f.target()));
 
-        List<LogicalFlow> addedFlows = flows
+        Set<LogicalFlow> addedFlows = flows
                 .stream()
                 .filter(f -> !existing.containsKey(tuple(f.source(), f.target())))
                 .map(f -> {
@@ -251,7 +294,7 @@ public class LogicalFlowDao {
                             .copyOf(f)
                             .withId(record.getId());
                 })
-                .collect(toList());
+                .collect(toSet());
 
 
         addedFlows.addAll(removedFlows);
@@ -301,6 +344,16 @@ public class LogicalFlowDao {
         return baseQuery()
                 .where(LOGICAL_FLOW.ID.eq(dataFlowId))
                 .fetchOne(TO_DOMAIN_MAPPER);
+    }
+
+    public long updateReadOnly(long flowId, boolean isReadOnly, String user) {
+        return dsl
+            .update(LOGICAL_FLOW)
+            .set(LOGICAL_FLOW.IS_READONLY, isReadOnly)
+            .set(LOGICAL_FLOW.LAST_UPDATED_AT, Timestamp.valueOf(nowUtc()))
+                .set(LOGICAL_FLOW.LAST_UPDATED_BY, user)
+            .where(LOGICAL_FLOW.ID.eq(flowId))
+            .execute();
     }
 
 
@@ -409,6 +462,7 @@ public class LogicalFlowDao {
         return dsl
                 .select(LOGICAL_FLOW.fields())
                 .select(SOURCE_NAME_FIELD, TARGET_NAME_FIELD)
+                .select(SOURCE_EXTERNAL_ID_FIELD, TARGET_EXTERNAL_ID_FIELD)
                 .from(LOGICAL_FLOW);
     }
 
@@ -442,5 +496,23 @@ public class LogicalFlowDao {
                 .execute();
     }
 
+
+    public Set<Operation> calculateAmendedFlowOperations(Set<Operation> operationsForFlow,
+                                                         String username) {
+
+        //TODO: Need to add 'FLOW_ADMIN' permissions for bulk loaders
+        boolean hasOverride = dsl
+                .fetchExists(DSL
+                        .select(USER_ROLE.ROLE)
+                        .from(USER_ROLE)
+                        .where(USER_ROLE.ROLE.eq(SystemRole.LOGICAL_DATA_FLOW_EDITOR.name())
+                                .and(USER_ROLE.USER_NAME.eq(username))));
+
+        if (hasOverride) {
+            return union(operationsForFlow, asSet(Operation.ADD, Operation.UPDATE, Operation.REMOVE));
+        } else {
+            return operationsForFlow;
+        }
+    }
 
 }

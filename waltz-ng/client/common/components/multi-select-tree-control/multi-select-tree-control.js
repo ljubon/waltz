@@ -17,9 +17,15 @@
  */
 
 import _ from "lodash";
-import {initialiseData, invokeFunction} from "../../../common";
+import {initialiseData, invokeFunction} from "../../index";
 import {preventDefault, stopPropagation} from "../../browser-utils"
-import {buildHierarchies, doSearch, prepareSearchNodes} from "../../../common/hierarchy-utils";
+import {
+    buildHierarchies,
+    doSearch,
+    prepareSearchNodes,
+    determineExpandedNodes,
+    determineDepthLimit
+} from "../../hierarchy-utils";
 import template from "./multi-select-tree-control.html";
 
 
@@ -28,7 +34,7 @@ const bindings = {
     onClick: "<?",
     onCheck: "<",
     onUncheck: "<",
-    orderByExpression: '@?',
+    orderByExpression: "@?",
     checkedItemIds: "<",
     expandedItemIds: "<",
     disablePredicate: "<?",
@@ -42,7 +48,7 @@ const initialState = {
     expandedNodes: [],
     checkedMap: {},
     hierarchy: [],
-    orderByExpression: "-name",
+    orderByExpression: ["-position", "-name"],
     onCheck: (id, node) => console.log("default handler in multi-select-treecontrol for node id check: ", id),
     onUncheck: (id, node) => console.log("default handler in multi-select-treecontrol for node id uncheck: ", id),
     onClick: (id, node) => console.log("default handler in multi-select-treecontrol for node click: ", node),
@@ -155,8 +161,10 @@ function controller() {
         vm.hierarchy = buildHierarchies(matchingNodes, false);
 
         vm.expandedNodes = termStr.length === 0
-            ? expandSelectedNodes(vm.items, vm.expandedItemIds)
-            : matchingNodes;
+            ? expandSelectedNodes(vm.items, vm.expandedItemIds) // reset tree to 'normal' state
+            : determineExpandedNodes(  // expand results, taking precautions to not expand too many nodes
+                vm.hierarchy,
+                determineDepthLimit(matchingNodes.length));
     };
 
     vm.clearSearch = () => {

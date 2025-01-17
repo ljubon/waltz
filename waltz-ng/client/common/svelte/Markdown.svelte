@@ -1,13 +1,10 @@
 <script>
-    import showdown from "showdown";
     import _ from "lodash";
+    import {markdownToHtml} from "../markdown-utils";
 
     export let text = "";
     export let context = {};
     export let inline = false;
-
-    const converter = new showdown.Converter();
-    converter.setFlavor("github");
 
     function mkHtml(markdown, ctx) {
         try {
@@ -15,25 +12,23 @@
                 ? markdown
                 : _.template(markdown, { variable: "ctx"})(ctx);  // creates template function then invokes with `ctx`
 
-            return converter.makeHtml(markdownText);
+            return markdownToHtml(markdownText);
         } catch (e) {
             console.log("Failed to render markdown with context", { context, markdown, e })
         }
     }
 
-    $: html = mkHtml(text, context);
-
+    $: convertedHtml = mkHtml(text, context);
 </script>
 
+
 <span class:inline-markdown={inline}>
-    {@html html}
+    {@html convertedHtml}
 </span>
 
 
 <style>
-
     :global(.inline-markdown > p) {
         display: inline;
     }
-
 </style>

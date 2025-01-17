@@ -18,22 +18,24 @@
 
 package org.finos.waltz.web.endpoints.api;
 
+import org.finos.waltz.common.Checks;
+import org.finos.waltz.model.EntityKind;
+import org.finos.waltz.model.EntityReference;
+import org.finos.waltz.model.IdSelectionOptions;
+import org.finos.waltz.model.involvement.EntityInvolvementChangeCommand;
+import org.finos.waltz.model.involvement.Involvement;
+import org.finos.waltz.model.person.Person;
 import org.finos.waltz.service.involvement.InvolvementService;
 import org.finos.waltz.service.user.UserRoleService;
 import org.finos.waltz.web.DatumRoute;
 import org.finos.waltz.web.ListRoute;
 import org.finos.waltz.web.endpoints.Endpoint;
-import org.finos.waltz.model.EntityKind;
-import org.finos.waltz.model.EntityReference;
-import org.finos.waltz.model.IdSelectionOptions;
-import org.finos.waltz.model.application.Application;
-import org.finos.waltz.model.involvement.EntityInvolvementChangeCommand;
-import org.finos.waltz.model.involvement.Involvement;
-import org.finos.waltz.model.person.Person;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import spark.Request;
 
+import static java.lang.String.format;
+import static org.finos.waltz.common.Checks.checkTrue;
 import static org.finos.waltz.web.WebUtilities.*;
 import static org.finos.waltz.web.endpoints.EndpointUtilities.*;
 
@@ -58,13 +60,14 @@ public class InvolvementEndpoint implements Endpoint {
     public void register() {
 
         String findByEmployeePath = mkPath(BASE_URL, "employee", ":employeeId");
-        String findDirectAppsByEmployeePath = mkPath(findByEmployeePath, "applications", "direct");
-        String findAllAppsByEmployeePath = mkPath(findByEmployeePath, "applications");
         String findByEntityRefPath = mkPath(BASE_URL, "entity", ":kind", ":id");
         String findPeopleByEntityRefPath = mkPath(findByEntityRefPath, "people");
+        String findExistingInvolvementKindIdsForUserPath = mkPath(findByEntityRefPath, "user");
 
         String findBySelectorPath = mkPath(BASE_URL, "selector", "involvement");
         String findPeopleBySelectorPath = mkPath(BASE_URL, "selector", "people");
+        String countOrphanInvolvementsForKindPath = mkPath(BASE_URL, "entity-kind", ":kind", "orphan-count");
+        String cleanupInvalidInvolvementsForEntityPath = mkPath(BASE_URL, "entity-kind", ":kind", "cleanup-orphans");
 
         String updateForEntityRefPath = mkPath(BASE_URL, "entity", ":kind", ":id");
 
@@ -73,19 +76,14 @@ public class InvolvementEndpoint implements Endpoint {
             return service.findByEmployeeId(employeeId);
         };
 
-        ListRoute<Application>  findDirectAppsByEmployeeRoute = (request, response) -> {
-            String employeeId = request.params("employeeId");
-            return service.findDirectApplicationsByEmployeeId(employeeId);
-        };
-
-        ListRoute<Application>  findAllAppsByEmployeeRoute = (request, response) -> {
-            String employeeId = request.params("employeeId");
-            return service.findAllApplicationsByEmployeeId(employeeId);
-        };
-
         ListRoute<Involvement> findByEntityRefRoute = (request, response) -> {
             EntityReference entityReference = getEntityReference(request);
             return service.findByEntityReference(entityReference);
+        };
+
+        ListRoute<Long> findExistingInvolvementKindIdsForUserRoute = (request, response) -> {
+            EntityReference entityReference = getEntityReference(request);
+            return service.findExistingInvolvementKindIdsForUser(entityReference, getUsername(request));
         };
 
         ListRoute<Involvement> findBySelectorRoute = (request, response) -> {
@@ -93,24 +91,35 @@ public class InvolvementEndpoint implements Endpoint {
             return service.findByGenericEntitySelector(selectionOptions);
         };
 
-        ListRoute<Person>  findPeopleByEntityRefRoute = (request, response) -> {
+        ListRoute<Person> findPeopleByEntityRefRoute = (request, response) -> {
             EntityReference entityReference = getEntityReference(request);
             return service.findPeopleByEntityReference(entityReference);
         };
 
-        ListRoute<Person>  findPeopleBySelectorRoute = (request, response) -> {
+        ListRoute<Person> findPeopleBySelectorRoute = (request, response) -> {
             IdSelectionOptions selectionOptions = readIdSelectionOptionsFromBody(request);
             return service.findPeopleByGenericEntitySelector(selectionOptions);
+        };
+
+        DatumRoute<Integer> countOrphanInvolvementsForKindRoute = (request, response) -> {
+            EntityKind kind = getKind(request);
+            return service.countOrphanInvolvementsForKind(kind);
+        };
+
+        DatumRoute<Integer> cleanupInvalidInvolvementsForKindRoute = (request, response) -> {
+            EntityKind kind = getKind(request);
+            return service.cleanupInvolvementsForKind(getUsername(request), kind);
         };
 
         DatumRoute<Boolean> updateForEntityRefRoute = (request, response) -> updateEntityInvolvement(request);
 
         getForList(findByEmployeePath, findByEmployeeRoute);
-        getForList(findDirectAppsByEmployeePath, findDirectAppsByEmployeeRoute);
-        getForList(findAllAppsByEmployeePath, findAllAppsByEmployeeRoute);
         getForList(findByEntityRefPath, findByEntityRefRoute);
+        getForDatum(countOrphanInvolvementsForKindPath, countOrphanInvolvementsForKindRoute);
         postForList(findBySelectorPath, findBySelectorRoute);
         getForList(findPeopleByEntityRefPath, findPeopleByEntityRefRoute);
+        getForList(findExistingInvolvementKindIdsForUserPath, findExistingInvolvementKindIdsForUserRoute);
+        deleteForDatum(cleanupInvalidInvolvementsForEntityPath, cleanupInvalidInvolvementsForKindRoute);
         postForList(findPeopleBySelectorPath, findPeopleBySelectorRoute);
         postForDatum(updateForEntityRefPath, updateForEntityRefRoute);
     }
@@ -119,12 +128,14 @@ public class InvolvementEndpoint implements Endpoint {
     private Boolean updateEntityInvolvement(Request request) throws java.io.IOException {
         EntityReference entityReference = getEntityReference(request);
         EntityInvolvementChangeCommand command = readBody(request, EntityInvolvementChangeCommand.class);
+
         requireEditRoleForEntity(
                 userRoleService,
                 request,
                 entityReference.kind(),
                 command.operation(),
-                EntityKind.ENTITY_NAMED_NOTE);
+                EntityKind.INVOLVEMENT);
+
         String username = getUsername(request);
 
         switch (command.operation()) {

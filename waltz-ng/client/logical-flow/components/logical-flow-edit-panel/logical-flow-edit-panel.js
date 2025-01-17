@@ -28,9 +28,11 @@ import {event} from "d3-selection";
 import {entity} from "../../../common/services/enums/entity";
 import {loadFlowClassificationRatings} from "../../../flow-classification-rule/flow-classification-utils";
 import toasts from "../../../svelte-stores/toast-store";
+import DataTypeInfoPanel from "../data-type-info-panel/DataTypeInfoPanel.svelte";
 
 const bindings = {
     parentEntityRef: "<",
+    ratingDirection: "<"
 };
 
 
@@ -46,7 +48,9 @@ const initialState = {
     selectedCounterpart: null,
     selectedDecorators: null,
     selectedFlow: null,
-    selectedUsages: []
+    selectedUsages: [],
+    dataTypeInfo: null,
+    DataTypeInfoPanel
 };
 
 
@@ -116,6 +120,11 @@ function filterByType(typeId, flows = [], decorators = []) {
 }
 
 
+const transclude = {
+    legend: "legend",
+};
+
+
 function controller($element,
                     $q,
                     $scope,
@@ -145,6 +154,7 @@ function controller($element,
     vm.$onChanges = (changes) => {
         loadFlowClassificationRatings(serviceBroker)
             .then(r => {
+                vm.flowClassifications = r;
                 vm.flowClassificationsByCode = _.keyBy(r, d => d.code);
             });
 
@@ -289,6 +299,9 @@ function controller($element,
         vm.selectedDecorators = vm.selectedFlow
             ? _.filter(vm.logicalFlowDecorators, { dataFlowId: vm.selectedFlow.id })
             : [];
+        vm.selectedPhysicalFlows = vm.selectedFlow
+            ? _.filter(vm.physicalFlows, { logicalFlowId: vm.selectedFlow.id })
+            : [];
     };
 
     const selectType = (type) => {
@@ -320,7 +333,9 @@ function controller($element,
     vm.cancel = () => {
         vm.selectedCounterpart = null;
         vm.selectedDecorators = null;
+        vm.selectedPhysicalFlows = null;
         vm.selectedFlow = null;
+        vm.dataTypeInfo = null;
         vm.isDirty = false;
         vm.setMode("");
     };
@@ -339,13 +354,13 @@ function controller($element,
         }
     };
 
-    vm.deleteFlow = (flow) => {
-        const hasPhysicalFlow = _.some(vm.physicalFlows, { logicalFlowId: flow.id });
+    vm.deleteFlow = () => {
+        const hasPhysicalFlow = _.some(vm.physicalFlows, { logicalFlowId: vm.selectedFlow.id });
         if (!hasPhysicalFlow) {
             serviceBroker
                 .execute(
                     CORE_API.LogicalFlowStore.removeFlow,
-                    [flow.id])
+                    [vm.selectedFlow.id])
                 .then(reload)
                 .then(() => toasts.warning("Data flow removed"))
                 .catch(e => displayError("System error, please contact support", e));
@@ -364,34 +379,18 @@ function controller($element,
             .then(() => toasts.success("Data usage updated"));
     };
 
-    const addSource = (kind, entity) => {
-        const counterpartRef = { id: entity.id, kind, name: entity.name };
+    vm.addSource = (entity) => {
+        const counterpartRef = { id: entity.id, kind: entity.kind, name: entity.name };
         if (notifyIllegalFlow(toasts, vm.parentEntityRef, counterpartRef)) return;
         addFlow(mkNewFlow(counterpartRef, vm.parentEntityRef))
-            .then(() => selectSource(counterpartRef));
+            .then(() => $scope.$applyAsync(() => selectSource(counterpartRef)));
     };
 
-    const addTarget = (kind, entity) => {
-        const counterpartRef = { id: entity.id, kind, name: entity.name };
+    vm.addTarget = (entity) => {
+        const counterpartRef = { id: entity.id, kind: entity.kind, name: entity.name };
         if (notifyIllegalFlow(toasts, vm.parentEntityRef, counterpartRef)) return;
         addFlow(mkNewFlow(vm.parentEntityRef, counterpartRef))
-            .then(() => selectTarget(counterpartRef));
-    };
-
-    vm.addSourceApplication = (srcApp) => {
-        addSource("APPLICATION", srcApp);
-    };
-
-    vm.addSourceActor = (actor) => {
-        addSource("ACTOR", actor);
-    };
-
-    vm.addTargetApplication = (targetApp) => {
-        addTarget("APPLICATION", targetApp);
-    };
-
-    vm.addTargetActor = (actor) => {
-        addTarget("ACTOR", actor);
+            .then(() => $scope.$applyAsync(() => selectTarget(counterpartRef)));
     };
 
     vm.setDirtyChange = (dirty) => {
@@ -404,6 +403,12 @@ function controller($element,
         }
         vm.mode = mode;
     };
+
+    vm.onSelectDataType = (dt) => {
+        vm.dataTypeInfo = dt;
+    }
+
+    vm.selectionFilter = (d) => !_.includes(workingDataTypes, d.id);
 }
 
 
@@ -419,6 +424,7 @@ controller.$inject = [
 const component = {
     template,
     bindings,
+    transclude,
     controller
 };
 

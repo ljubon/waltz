@@ -17,7 +17,6 @@
   -->
 
 <div>
-
     <waltz-page-header name="Playpen"
                        small="1"
                        icon="rocket">
@@ -26,26 +25,14 @@
             <li>Playpen</li>
         </ol>
     </waltz-page-header>
-
     <waltz-section>
-        <div class="row">
-            <div class="col-sm-6">
-                <waltz-svelte-component ng-if="$ctrl.gridId"
-                                        component="$ctrl.TestPage"
-                                        grid-id="$ctrl.gridId"
-                                        column-defs="$ctrl.columnDefs">
-
-                </waltz-svelte-component>
-            </div>
-            <div class="col-sm-6">
-                <waltz-svelte-component component="$ctrl.TestPage"
-                                        grid-id="$ctrl.gridId"
-                                        column-defs="$ctrl.columnDefs">
+        <div class="row" >
+            <div class="col-md-12">
+                <waltz-svelte-component component="$ctrl.CounterpartPicker">
                 </waltz-svelte-component>
             </div>
         </div>
     </waltz-section>
-
 
 
 

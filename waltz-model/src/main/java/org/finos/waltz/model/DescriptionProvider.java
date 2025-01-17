@@ -20,10 +20,11 @@ package org.finos.waltz.model;
 
 import org.immutables.value.Value;
 
-
+/**
+ * Nullable description
+ */
 public interface DescriptionProvider {
 
-    @Value
     @Value.Auxiliary
     @Nullable
     String description();

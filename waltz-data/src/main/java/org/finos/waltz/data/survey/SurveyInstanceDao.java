@@ -19,53 +19,126 @@
 package org.finos.waltz.data.survey;
 
 import org.finos.waltz.common.CollectionUtilities;
+import org.finos.waltz.common.SetUtilities;
 import org.finos.waltz.data.InlineSelectFieldFactory;
 import org.finos.waltz.model.EntityKind;
-import org.finos.waltz.model.survey.*;
+import org.finos.waltz.model.Operation;
+import org.finos.waltz.model.ReleaseLifecycleStatus;
+import org.finos.waltz.model.Severity;
+import org.finos.waltz.model.attestation.ImmutableSyncRecipientsResponse;
+import org.finos.waltz.model.attestation.SyncRecipientsResponse;
+import org.finos.waltz.model.survey.ImmutableSurveyInstance;
+import org.finos.waltz.model.survey.ImmutableSurveyRunCompletionRate;
+import org.finos.waltz.model.survey.SurveyInstance;
+import org.finos.waltz.model.survey.SurveyInstanceCreateCommand;
+import org.finos.waltz.model.survey.SurveyInstanceStatus;
+import org.finos.waltz.model.survey.SurveyInvolvementKind;
+import org.finos.waltz.model.survey.SurveyRunCompletionRate;
+import org.finos.waltz.schema.tables.records.ChangeLogRecord;
+import org.finos.waltz.schema.tables.records.SurveyInstanceOwnerRecord;
 import org.finos.waltz.schema.tables.records.SurveyInstanceRecipientRecord;
 import org.finos.waltz.schema.tables.records.SurveyInstanceRecord;
-import org.jooq.*;
+import org.jooq.CommonTableExpression;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Record;
+import org.jooq.Record1;
+import org.jooq.Record2;
+import org.jooq.Record3;
+import org.jooq.Record6;
+import org.jooq.RecordMapper;
+import org.jooq.Result;
+import org.jooq.Select;
+import org.jooq.SelectConditionStep;
 import org.jooq.impl.DSL;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
+import static java.lang.String.format;
 import static java.util.Optional.ofNullable;
+import static java.util.stream.Collectors.collectingAndThen;
+import static java.util.stream.Collectors.toSet;
 import static org.finos.waltz.common.Checks.checkNotNull;
-import static org.finos.waltz.common.DateTimeUtilities.*;
-import static org.finos.waltz.common.ListUtilities.newArrayList;
+import static org.finos.waltz.common.CollectionUtilities.map;
+import static org.finos.waltz.common.DateTimeUtilities.nowUtc;
+import static org.finos.waltz.common.DateTimeUtilities.nowUtcTimestamp;
+import static org.finos.waltz.common.DateTimeUtilities.toLocalDate;
+import static org.finos.waltz.common.DateTimeUtilities.toSqlDate;
+import static org.finos.waltz.common.DateTimeUtilities.today;
+import static org.finos.waltz.common.StringUtilities.lower;
 import static org.finos.waltz.data.JooqUtilities.maybeReadRef;
 import static org.finos.waltz.model.EntityReference.mkRef;
-import static org.finos.waltz.schema.Tables.*;
+import static org.finos.waltz.schema.Tables.CHANGE_LOG;
+import static org.finos.waltz.schema.Tables.INVOLVEMENT;
+import static org.finos.waltz.schema.Tables.INVOLVEMENT_GROUP_ENTRY;
+import static org.finos.waltz.schema.Tables.INVOLVEMENT_KIND;
+import static org.finos.waltz.schema.Tables.PERSON;
+import static org.finos.waltz.schema.Tables.SURVEY_INSTANCE;
+import static org.finos.waltz.schema.Tables.SURVEY_INSTANCE_OWNER;
+import static org.finos.waltz.schema.Tables.SURVEY_INSTANCE_RECIPIENT;
+import static org.finos.waltz.schema.Tables.SURVEY_RUN;
+import static org.finos.waltz.schema.Tables.SURVEY_TEMPLATE;
+import static org.finos.waltz.schema.tables.InvolvementGroup.INVOLVEMENT_GROUP;
 
 @Repository
 public class SurveyInstanceDao {
 
+    private static final Logger LOG = LoggerFactory.getLogger(SurveyInstanceDao.class);
+
     private static final org.finos.waltz.schema.tables.SurveyInstance si = SURVEY_INSTANCE;
+    private static final org.finos.waltz.schema.tables.SurveyRun sr = SURVEY_RUN;
+    private static final org.finos.waltz.schema.tables.SurveyInstanceRecipient sir = SURVEY_INSTANCE_RECIPIENT;
+    private static final org.finos.waltz.schema.tables.SurveyInstanceOwner sio = SURVEY_INSTANCE_OWNER;
+    private static final org.finos.waltz.schema.tables.SurveyTemplate st = SURVEY_TEMPLATE;
+    private static final org.finos.waltz.schema.tables.InvolvementKind ik = INVOLVEMENT_KIND;
+    private static final org.finos.waltz.schema.tables.Involvement i = INVOLVEMENT;
+    private static final org.finos.waltz.schema.tables.Person p = PERSON;
+    private static final org.finos.waltz.schema.tables.InvolvementGroup ig = INVOLVEMENT_GROUP;
+    private static final org.finos.waltz.schema.tables.InvolvementGroupEntry ige = INVOLVEMENT_GROUP_ENTRY;
 
     private static final Field<String> ENTITY_NAME_FIELD = InlineSelectFieldFactory
             .mkNameField(
-                si.ENTITY_ID,
-                si.ENTITY_KIND,
-                newArrayList(EntityKind.values()))
+                    si.ENTITY_ID,
+                    si.ENTITY_KIND)
             .as("entity_name");
 
     private static final Field<String> EXTERNAL_ID_FIELD = InlineSelectFieldFactory
             .mkExternalIdField(
-                si.ENTITY_ID,
-                si.ENTITY_KIND,
-                newArrayList(EntityKind.values()))
+                    si.ENTITY_ID,
+                    si.ENTITY_KIND)
             .as("external_id");
 
 
     private static final Condition IS_ORIGINAL_INSTANCE_CONDITION = si.ORIGINAL_INSTANCE_ID.isNull();
 
-    private static final RecordMapper<Record, SurveyInstance> TO_DOMAIN_MAPPER = r -> {
+    private static final Set<SurveyInstanceStatus> UPDATABLE_RECIPIENT_STATUSES = SetUtilities.asSet(
+            SurveyInstanceStatus.NOT_STARTED,
+            SurveyInstanceStatus.IN_PROGRESS,
+            SurveyInstanceStatus.REJECTED);
+
+    private static final Set<SurveyInstanceStatus> UPDATABLE_OWNER_STATUSES = SetUtilities.asSet(
+            SurveyInstanceStatus.NOT_STARTED,
+            SurveyInstanceStatus.IN_PROGRESS,
+            SurveyInstanceStatus.COMPLETED,
+            SurveyInstanceStatus.REJECTED);
+
+    public static final RecordMapper<Record, SurveyInstance> TO_DOMAIN_MAPPER = r -> {
         SurveyInstanceRecord record = r.into(si);
         return ImmutableSurveyInstance.builder()
                 .id(record.getId())
@@ -86,11 +159,38 @@ public class SurveyInstanceDao {
                 .owningRole(record.getOwningRole())
                 .name(record.getName())
                 .qualifierEntity(maybeReadRef(
-                            record,
-                            si.ENTITY_QUALIFIER_KIND,
-                            si.ENTITY_QUALIFIER_ID)
+                        record,
+                        si.ENTITY_QUALIFIER_KIND,
+                        si.ENTITY_QUALIFIER_ID)
                         .orElse(null))
+                .issuedOn(toLocalDate(record.getIssuedOn()))
                 .build();
+    };
+
+    private static final Function<SurveyInstance, SurveyInstanceRecord> TO_RECORD_MAPPER = d -> {
+
+        SurveyInstanceRecord r = new SurveyInstanceRecord();
+
+        d.id().ifPresent(r::setId);
+        r.setSurveyRunId(d.surveyRunId());
+        r.setEntityKind(d.surveyEntity().kind().name());
+        r.setEntityId(d.surveyEntity().id());
+        r.setStatus(d.status().name());
+        r.setSubmittedAt(Timestamp.valueOf(d.submittedAt()));
+        r.setSubmittedBy(d.submittedBy());
+        r.setDueDate(toSqlDate(d.dueDate()));
+        r.setOriginalInstanceId(d.originalInstanceId());
+        r.setApprovedAt(Timestamp.valueOf(d.approvedAt()));
+        r.setApprovedBy(d.approvedBy());
+        r.setOwningRole(d.owningRole());
+        r.setEntityQualifierId(d.qualifierEntity().id());
+        r.setEntityQualifierKind(d.qualifierEntity().kind().name());
+        r.setName(d.name());
+        r.setApprovalDueDate(toSqlDate(d.approvalDueDate()));
+        r.setIssuedOn(toSqlDate(d.issuedOn()));
+        r.changed(SURVEY_INSTANCE.ID, false);
+
+        return r;
     };
 
     private final DSLContext dsl;
@@ -138,6 +238,34 @@ public class SurveyInstanceDao {
     }
 
 
+    public Set<SurveyInstance> findForSurveyRun(long surveyRunId, SurveyInstanceStatus... statuses) {
+        Set<String> statusStrings = Arrays.stream(statuses).map(s -> s.name()).collect(toSet());
+
+        return dsl.select(si.fields())
+                .select(ENTITY_NAME_FIELD)
+                .select(EXTERNAL_ID_FIELD)
+                .from(si)
+                .where(si.SURVEY_RUN_ID.eq(surveyRunId))
+                .and(IS_ORIGINAL_INSTANCE_CONDITION)
+                .and(si.STATUS.in(statusStrings))
+                .fetchSet(TO_DOMAIN_MAPPER);
+    }
+
+
+    public Set<SurveyInstance> findForSurveyTemplate(long templateId, SurveyInstanceStatus... statuses) {
+        Set<String> statusStrings = Arrays.stream(statuses).map(s -> s.name()).collect(toSet());
+
+        return dsl.select(si.fields())
+                .select(ENTITY_NAME_FIELD)
+                .select(EXTERNAL_ID_FIELD)
+                .from(si)
+                .join(sr).on(sr.ID.eq(si.SURVEY_RUN_ID))
+                .where(sr.SURVEY_TEMPLATE_ID.eq(templateId))
+                .and(si.STATUS.in(statusStrings))
+                .fetchSet(TO_DOMAIN_MAPPER);
+    }
+
+
     public long create(SurveyInstanceCreateCommand command) {
         checkNotNull(command, "command cannot be null");
 
@@ -146,19 +274,23 @@ public class SurveyInstanceDao {
         record.setEntityKind(command.entityReference().kind().name());
         record.setEntityId(command.entityReference().id());
         record.setStatus(command.status().name());
-        record.setDueDate(command.dueDate().map(Date::valueOf).orElse(null));
+        record.setDueDate(toSqlDate(command.dueDate()));
         record.setApprovalDueDate(toSqlDate(command.approvalDueDate()));
         record.setOwningRole(command.owningRole());
+        record.setName(command.name());
+        record.setIssuedOn(toSqlDate(command.issuedOn()));
 
         record.store();
         return record.getId();
     }
 
 
-    public long createPreviousVersion(SurveyInstance currentInstance) {
+    public long createPreviousVersion(Optional<DSLContext> tx, SurveyInstance currentInstance) {
         checkNotNull(currentInstance, "currentInstance cannot be null");
 
-        SurveyInstanceRecord record = dsl.newRecord(si);
+        DSLContext dslContext = tx.orElse(dsl);
+
+        SurveyInstanceRecord record = dslContext.newRecord(si);
         record.setSurveyRunId(currentInstance.surveyRunId());
         record.setEntityKind(currentInstance.surveyEntity().kind().name());
         record.setEntityId(currentInstance.surveyEntity().id());
@@ -175,11 +307,12 @@ public class SurveyInstanceDao {
         record.setOwningRole(currentInstance.owningRole());
         record.setName(currentInstance.name());
         Optional
-            .ofNullable(currentInstance.qualifierEntity())
-            .ifPresent(ref -> {
-                record.setEntityQualifierKind(ref.kind().name());
-                record.setEntityQualifierId(ref.id());
-            });
+                .ofNullable(currentInstance.qualifierEntity())
+                .ifPresent(ref -> {
+                    record.setEntityQualifierKind(ref.kind().name());
+                    record.setEntityQualifierId(ref.id());
+                });
+        record.setIssuedOn(toSqlDate(today()));
 
         record.store();
         return record.getId();
@@ -193,13 +326,15 @@ public class SurveyInstanceDao {
     }
 
 
-    public int updateStatus(long instanceId, SurveyInstanceStatus newStatus) {
+    public int updateStatus(Optional<DSLContext> tx, long instanceId, SurveyInstanceStatus newStatus) {
         checkNotNull(newStatus, "newStatus cannot be null");
-
-        return dsl.update(si)
+        DSLContext dslContext = tx.orElse(dsl);
+        return dslContext
+                .update(si)
                 .set(si.STATUS, newStatus.name())
                 .where(si.STATUS.notEqual(newStatus.name())
-                        .and(si.ID.eq(instanceId)))
+                        .and(si.ID.eq(instanceId))
+                        .and(si.ORIGINAL_INSTANCE_ID.isNull()))
                 .execute();
     }
 
@@ -245,35 +380,60 @@ public class SurveyInstanceDao {
                 .execute();
     }
 
-
-    public int updateSubmitted(long instanceId, String userName) {
+    public int markSubmitted(Optional<DSLContext> tx, long instanceId, String userName) {
         checkNotNull(userName, "userName cannot be null");
-
-        return dsl.update(si)
+        DSLContext dslContext = tx.orElse(dsl);
+        return dslContext
+                .update(si)
+                .set(si.STATUS, SurveyInstanceStatus.COMPLETED.name())
                 .set(si.SUBMITTED_AT, Timestamp.valueOf(nowUtc()))
                 .set(si.SUBMITTED_BY, userName)
-                .where(si.ID.eq(instanceId))
+                .where(si.ID.eq(instanceId)
+                        .and(si.ORIGINAL_INSTANCE_ID.isNull())
+                        .and(si.STATUS.in(
+                                SurveyInstanceStatus.NOT_STARTED.name(),
+                                SurveyInstanceStatus.IN_PROGRESS.name())))
                 .execute();
     }
 
 
-    public int markApproved(long instanceId, String userName) {
+    public int markApproved(Optional<DSLContext> tx, long instanceId, String userName) {
         checkNotNull(userName, "userName cannot be null");
-
-        return dsl.update(si)
+        DSLContext dslContext = tx.orElse(dsl);
+        return dslContext
+                .update(si)
                 .set(si.APPROVED_AT, Timestamp.valueOf(nowUtc()))
                 .set(si.APPROVED_BY, userName)
                 .set(si.STATUS, SurveyInstanceStatus.APPROVED.name())
-                .where(si.ID.eq(instanceId))
+                .where(si.ID.eq(instanceId)
+                        .and(si.ORIGINAL_INSTANCE_ID.isNull())
+                        .and(si.STATUS.eq(SurveyInstanceStatus.COMPLETED.name())))
                 .execute();
     }
 
+    public int reopenSurvey(Optional<DSLContext> tx,
+                            long instanceId,
+                            LocalDate dueDate,
+                            LocalDate approvalDueDate) {
 
-    public void clearApproved(long instanceId) {
-        dsl.update(si)
+        DSLContext dslContext = tx.orElse(dsl);
+
+        return dslContext
+                .update(si)
+                .set(si.STATUS, SurveyInstanceStatus.IN_PROGRESS.name())
                 .set(si.APPROVED_AT, (Timestamp) null)
                 .set(si.APPROVED_BY, (String) null)
-                .where(si.ID.eq(instanceId))
+                .set(si.SUBMITTED_AT, (Timestamp) null)
+                .set(si.SUBMITTED_BY, (String) null)
+                .set(si.ISSUED_ON, toSqlDate(nowUtcTimestamp())) //update the issued on to the current date
+                .set(si.DUE_DATE, toSqlDate(dueDate))
+                .set(si.APPROVAL_DUE_DATE, toSqlDate(approvalDueDate))
+                .where(si.ID.eq(instanceId)
+                        .and(si.ORIGINAL_INSTANCE_ID.isNull())
+                        .and(si.STATUS.in(
+                                SurveyInstanceStatus.APPROVED.name(),
+                                SurveyInstanceStatus.REJECTED.name(),
+                                SurveyInstanceStatus.WITHDRAWN.name())))
                 .execute();
     }
 
@@ -390,10 +550,24 @@ public class SurveyInstanceDao {
     }
 
     public int[] createInstanceRecipients(Long instanceId, Collection<Long> personIds) {
-        Collection<SurveyInstanceRecipientRecord> records = CollectionUtilities.map(
+        Collection<SurveyInstanceRecipientRecord> records = map(
                 personIds,
                 p -> {
                     SurveyInstanceRecipientRecord record = new SurveyInstanceRecipientRecord();
+                    record.setSurveyInstanceId(instanceId);
+                    record.setPersonId(p);
+                    return record;
+                });
+
+        return dsl.batchInsert(records).execute();
+    }
+
+
+    public int[] createInstanceOwners(Long instanceId, Collection<Long> personIds) {
+        Collection<SurveyInstanceOwnerRecord> records = map(
+                personIds,
+                p -> {
+                    SurveyInstanceOwnerRecord record = new SurveyInstanceOwnerRecord();
                     record.setSurveyInstanceId(instanceId);
                     record.setPersonId(p);
                     return record;
@@ -412,5 +586,464 @@ public class SurveyInstanceDao {
                 .where(SURVEY_INSTANCE_OWNER.PERSON_ID.eq(personId))
                 .and(IS_ORIGINAL_INSTANCE_CONDITION)
                 .fetchSet(TO_DOMAIN_MAPPER);
+    }
+
+
+    public SyncRecipientsResponse getReassignRecipientsCounts() {
+
+        CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys = getInScopeSurveysCTE(UPDATABLE_RECIPIENT_STATUSES);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredRecipients = getRequiredRecipientsCTE(inScopeSurveys);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingRecipients = getExistingRecipientsCTE(inScopeSurveys);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> recipientsToRemove = getMembersToRemoveCTE(existingRecipients, requiredRecipients);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> recipientsToAdd = getMembersToAddCTE(existingRecipients, requiredRecipients);
+
+        Result<Record6<Long, Long, String, Long, String, String>> countToRemove = dsl
+                .with(inScopeSurveys)
+                .with(requiredRecipients)
+                .with(existingRecipients)
+                .with(recipientsToRemove)
+                .selectFrom(recipientsToRemove)
+                .fetch();
+
+        Result<Record6<Long, Long, String, Long, String, String>> countToAdd = dsl
+                .with(inScopeSurveys)
+                .with(requiredRecipients)
+                .with(existingRecipients)
+                .with(recipientsToAdd)
+                .selectFrom(recipientsToAdd)
+                .fetch();
+
+        return ImmutableSyncRecipientsResponse
+                .builder()
+                .recipientsCreatedCount((long) countToAdd.size())
+                .recipientsRemovedCount((long) countToRemove.size())
+                .build();
+    }
+
+
+    public SyncRecipientsResponse getReassignOwnersCounts() {
+
+        CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys = getInScopeSurveysCTE(UPDATABLE_OWNER_STATUSES);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredOwners = getRequiredOwnersCTE(inScopeSurveys);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingOwners = getExistingOwnersCTE(inScopeSurveys);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> ownersToRemove = getMembersToRemoveCTE(existingOwners, requiredOwners);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> ownersToAdd = getMembersToAddCTE(existingOwners, requiredOwners);
+
+        Result<Record6<Long, Long, String, Long, String, String>> countToRemove = dsl
+                .with(inScopeSurveys)
+                .with(requiredOwners)
+                .with(existingOwners)
+                .with(ownersToRemove)
+                .selectFrom(ownersToRemove)
+                .fetch();
+
+        Result<Record6<Long, Long, String, Long, String, String>> countToAdd = dsl
+                .with(inScopeSurveys)
+                .with(requiredOwners)
+                .with(existingOwners)
+                .with(ownersToAdd)
+                .selectFrom(ownersToAdd)
+                .fetch();
+
+        return ImmutableSyncRecipientsResponse
+                .builder()
+                .recipientsCreatedCount((long) countToAdd.size())
+                .recipientsRemovedCount((long) countToRemove.size())
+                .build();
+    }
+
+
+    public SyncRecipientsResponse reassignRecipients() {
+
+        CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys = getInScopeSurveysCTE(UPDATABLE_RECIPIENT_STATUSES);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredRecipients = getRequiredRecipientsCTE(inScopeSurveys);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingRecipients = getExistingRecipientsCTE(inScopeSurveys);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> recipientsToRemove = getMembersToRemoveCTE(existingRecipients, requiredRecipients);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> recipientsToAdd = getMembersToAddCTE(existingRecipients, requiredRecipients);
+
+        return dsl
+                .transactionResult(ctx -> {
+                    DSLContext tx = ctx.dsl();
+
+                    LOG.debug("Creating change logs for additions and removals");
+                    int[] removalChangelogs = createRemovalChangeLogs(tx, inScopeSurveys, requiredRecipients, existingRecipients, recipientsToRemove, SurveyInvolvementKind.RECIPIENT);
+                    int[] additionChangelogs = createAdditionChangeLogs(tx, inScopeSurveys, requiredRecipients, existingRecipients, recipientsToAdd, SurveyInvolvementKind.RECIPIENT);
+
+                    LOG.debug("Creating new recipients");
+                    int insertedRecords = insertRecipients(tx, inScopeSurveys, requiredRecipients, existingRecipients, recipientsToRemove, recipientsToAdd);
+
+                    LOG.debug("Removing recipients");
+                    int removedRecords = removeRecipients(tx, inScopeSurveys, requiredRecipients, existingRecipients, recipientsToRemove);
+
+                    LOG.debug(format("Created [%d] recipients and [%d] addition changelogs, removed [%d] recipients who are no longer active and [%d] removal changelogs",
+                            insertedRecords,
+                            IntStream.of(additionChangelogs).sum(),
+                            removedRecords,
+                            IntStream.of(removalChangelogs).sum()));
+
+                    return ImmutableSyncRecipientsResponse
+                            .builder()
+                            .recipientsCreatedCount((long) insertedRecords)
+                            .recipientsRemovedCount((long) removedRecords)
+                            .build();
+                });
+    }
+
+    public SyncRecipientsResponse reassignOwners() {
+
+        CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys = getInScopeSurveysCTE(UPDATABLE_OWNER_STATUSES);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredOwners = getRequiredOwnersCTE(inScopeSurveys);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingOwners = getExistingOwnersCTE(inScopeSurveys);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> ownersToRemove = getMembersToRemoveCTE(existingOwners, requiredOwners);
+        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> ownersToAdd = getMembersToAddCTE(existingOwners, requiredOwners);
+
+        return dsl
+                .transactionResult(ctx -> {
+                    DSLContext tx = ctx.dsl();
+
+                    LOG.debug("Creating change logs for additions and removals");
+                    int[] removalChangelogs = createRemovalChangeLogs(tx, inScopeSurveys, requiredOwners, existingOwners, ownersToRemove, SurveyInvolvementKind.OWNER);
+                    int[] additionChangelogs = createAdditionChangeLogs(tx, inScopeSurveys, requiredOwners, existingOwners, ownersToAdd, SurveyInvolvementKind.OWNER);
+
+                    LOG.debug("Creating new owners");
+                    int insertedRecords = insertOwners(tx, inScopeSurveys, requiredOwners, existingOwners, ownersToRemove, ownersToAdd);
+
+                    LOG.debug("Removing owners");
+                    int removedRecords = removeOwners(tx, inScopeSurveys, requiredOwners, existingOwners, ownersToRemove);
+
+                    LOG.debug(format("Created [%d] owners and [%d] addition changelogs, removed [%d] owners who are no longer active and [%d] removal changelogs",
+                            insertedRecords,
+                            IntStream.of(additionChangelogs).sum(),
+                            removedRecords,
+                            IntStream.of(removalChangelogs).sum()));
+
+                    return ImmutableSyncRecipientsResponse
+                            .builder()
+                            .recipientsCreatedCount((long) insertedRecords)
+                            .recipientsRemovedCount((long) removedRecords)
+                            .build();
+                });
+    }
+
+    private int removeRecipients(DSLContext tx,
+                                 CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys,
+                                 CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredRecipients,
+                                 CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingRecipients,
+                                 CommonTableExpression<Record6<Long, Long, String, Long, String, String>> recipientsToRemove) {
+        return tx
+                .with(inScopeSurveys)
+                .with(requiredRecipients)
+                .with(existingRecipients)
+                .with(recipientsToRemove)
+                .delete(sir)
+                .where(sir.ID.in(DSL
+                        .select(sir.ID)
+                        .from(sir)
+                        .innerJoin(recipientsToRemove)
+                        .on(sir.SURVEY_INSTANCE_ID.eq(recipientsToRemove.field("survey_instance_id", Long.class))
+                                .and(sir.PERSON_ID.eq(recipientsToRemove.field("person_id", Long.class))))))
+                .execute();
+    }
+
+    private int removeOwners(DSLContext tx,
+                             CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys,
+                             CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredOwners,
+                             CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingOwners,
+                             CommonTableExpression<Record6<Long, Long, String, Long, String, String>> ownersToRemove) {
+        return tx
+                .with(inScopeSurveys)
+                .with(requiredOwners)
+                .with(existingOwners)
+                .with(ownersToRemove)
+                .delete(sio)
+                .where(sio.ID.in(DSL
+                        .select(sio.ID)
+                        .from(sio)
+                        .innerJoin(ownersToRemove)
+                        .on(sio.SURVEY_INSTANCE_ID.eq(ownersToRemove.field("survey_instance_id", Long.class))
+                                .and(sio.PERSON_ID.eq(ownersToRemove.field("person_id", Long.class))))))
+                .execute();
+    }
+
+    private int insertRecipients(DSLContext tx,
+                                 CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys,
+                                 CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredRecipients,
+                                 CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingRecipients,
+                                 CommonTableExpression<Record6<Long, Long, String, Long, String, String>> recipientsToRemove,
+                                 CommonTableExpression<Record6<Long, Long, String, Long, String, String>> recipientsToAdd) {
+        return tx
+                .with(inScopeSurveys)
+                .with(requiredRecipients)
+                .with(existingRecipients)
+                .with(recipientsToRemove)
+                .with(recipientsToAdd)
+                .insertInto(sir)
+                .columns(sir.SURVEY_INSTANCE_ID, sir.PERSON_ID)
+                .select(DSL
+                        .select(recipientsToAdd.field("survey_instance_id", Long.class),
+                                recipientsToAdd.field("person_id", Long.class))
+                        .from(recipientsToAdd))
+                .execute();
+    }
+
+    private int insertOwners(DSLContext tx,
+                             CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys,
+                             CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredOwners,
+                             CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingOwners,
+                             CommonTableExpression<Record6<Long, Long, String, Long, String, String>> ownersToRemove,
+                             CommonTableExpression<Record6<Long, Long, String, Long, String, String>> ownersToAdd) {
+        return tx
+                .with(inScopeSurveys)
+                .with(requiredOwners)
+                .with(existingOwners)
+                .with(ownersToRemove)
+                .with(ownersToAdd)
+                .insertInto(sio)
+                .columns(sio.SURVEY_INSTANCE_ID, sio.PERSON_ID)
+                .select(DSL
+                        .select(ownersToAdd.field("survey_instance_id", Long.class),
+                                ownersToAdd.field("person_id", Long.class))
+                        .from(ownersToAdd))
+                .execute();
+    }
+
+    private int[] createAdditionChangeLogs(DSLContext tx,
+                                           CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys,
+                                           CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredMembers,
+                                           CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingMembers,
+                                           CommonTableExpression<Record6<Long, Long, String, Long, String, String>> membersToAdd,
+                                           SurveyInvolvementKind involvementKind) {
+
+        Timestamp now = nowUtcTimestamp();
+
+        return tx
+                .with(inScopeSurveys)
+                .with(requiredMembers)
+                .with(existingMembers)
+                .with(membersToAdd)
+                .selectFrom(membersToAdd)
+                .fetch()
+                .stream()
+                .map(r -> {
+
+                    String templateName = r.get("template_name", String.class);
+                    String person = r.get("person_email", String.class);
+                    Long personId = r.get("person_id", Long.class);
+                    Long instanceId = r.get("survey_instance_id", Long.class);
+                    String entityKind = r.get("entity_kind", String.class);
+                    Long entityId = r.get("entity_id", Long.class);
+
+                    String message = format(
+                            "Added %s: %s [%d] to survey: %s [%d] as they have the specified involvement kind",
+                            lower(involvementKind.name()),
+                            person,
+                            personId,
+                            templateName,
+                            instanceId);
+
+                    ChangeLogRecord clRecord = tx.newRecord(CHANGE_LOG);
+                    clRecord.setParentId(entityId);
+                    clRecord.setParentKind(entityKind);
+                    clRecord.setChildKind(EntityKind.SURVEY_INSTANCE_RECIPIENT.name());
+                    clRecord.setMessage(message);
+                    clRecord.setOperation(Operation.ADD.name());
+                    clRecord.setSeverity(Severity.INFORMATION.name());
+                    clRecord.setCreatedAt(now);
+                    clRecord.setUserId("admin");
+
+                    return clRecord;
+
+                })
+                .collect(collectingAndThen(toSet(), tx::batchInsert))
+                .execute();
+    }
+
+    private int[] createRemovalChangeLogs(DSLContext tx,
+                                          CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys,
+                                          CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredMembers,
+                                          CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingMembers,
+                                          CommonTableExpression<Record6<Long, Long, String, Long, String, String>> membersToRemove,
+                                          SurveyInvolvementKind involvementKind) {
+
+        Timestamp now = nowUtcTimestamp();
+
+        return tx
+                .with(inScopeSurveys)
+                .with(requiredMembers)
+                .with(existingMembers)
+                .with(membersToRemove)
+                .selectFrom(membersToRemove)
+                .fetch()
+                .stream()
+                .map(r -> {
+
+                    String templateName = r.get("template_name", String.class);
+                    String person = r.get("person_email", String.class);
+                    Long personId = r.get("person_id", Long.class);
+                    Long instanceId = r.get("survey_instance_id", Long.class);
+                    String entityKind = r.get("entity_kind", String.class);
+                    Long entityId = r.get("entity_id", Long.class);
+
+                    String messageText = "Removed %s: %s [%d] from survey: %s [%d] as they are no longer active";
+                    String message = format(
+                            messageText,
+                            lower(involvementKind.name()),
+                            person,
+                            personId,
+                            templateName,
+                            instanceId);
+
+                    ChangeLogRecord clRecord = tx.newRecord(CHANGE_LOG);
+                    clRecord.setParentId(entityId);
+                    clRecord.setParentKind(entityKind);
+                    clRecord.setChildKind(EntityKind.SURVEY_INSTANCE_RECIPIENT.name());
+                    clRecord.setMessage(message);
+                    clRecord.setOperation(Operation.REMOVE.name());
+                    clRecord.setSeverity(Severity.INFORMATION.name());
+                    clRecord.setCreatedAt(now);
+                    clRecord.setUserId("admin");
+
+                    return clRecord;
+                })
+                .collect(collectingAndThen(toSet(), tx::batchInsert))
+                .execute();
+    }
+
+    private CommonTableExpression<Record6<Long, Long, String, Long, String, String>> getMembersToAddCTE(CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingRecipients,
+                                                                                                        CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredRecipients) {
+        return DSL
+                .name("recipientsToAdd")
+                .fields("survey_instance_id", "person_id", "entity_kind", "entity_id", "template_name", "person_email")
+                .as(DSL
+                        .select(requiredRecipients.field("survey_instance_id", Long.class),
+                                requiredRecipients.field("person_id", Long.class),
+                                requiredRecipients.field("entity_kind", String.class),
+                                requiredRecipients.field("entity_id", Long.class),
+                                requiredRecipients.field("template_name", String.class),
+                                requiredRecipients.field("person_email", String.class))
+                        .from(requiredRecipients)
+                        .except(DSL
+                                .select(existingRecipients.field("survey_instance_id", Long.class),
+                                        existingRecipients.field("person_id", Long.class),
+                                        existingRecipients.field("entity_kind", String.class),
+                                        existingRecipients.field("entity_id", Long.class),
+                                        existingRecipients.field("template_name", String.class),
+                                        existingRecipients.field("person_email", String.class))
+                                .from(existingRecipients)));
+    }
+
+
+    private CommonTableExpression<Record6<Long, Long, String, Long, String, String>> getMembersToRemoveCTE(CommonTableExpression<Record6<Long, Long, String, Long, String, String>> existingMembers,
+                                                                                                           CommonTableExpression<Record6<Long, Long, String, Long, String, String>> requiredMembers) {
+        return DSL
+                .name("membersToRemove")
+                .fields("survey_instance_id", "person_id", "entity_kind", "entity_id", "template_name", "person_email")
+                .as(DSL
+                        .select(existingMembers.field("survey_instance_id", Long.class),
+                                existingMembers.field("person_id", Long.class),
+                                existingMembers.field("entity_kind", String.class),
+                                existingMembers.field("entity_id", Long.class),
+                                existingMembers.field("template_name", String.class),
+                                existingMembers.field("person_email", String.class))
+                        .from(existingMembers)
+                        .innerJoin(p).on(existingMembers.field("person_id", Long.class).eq(p.ID)
+                                .and(p.IS_REMOVED.isTrue())) // only want to remove members that are no longer active
+                        .except(DSL
+                                .select(requiredMembers.field("survey_instance_id", Long.class),
+                                        requiredMembers.field("person_id", Long.class),
+                                        requiredMembers.field("entity_kind", String.class),
+                                        requiredMembers.field("entity_id", Long.class),
+                                        requiredMembers.field("template_name", String.class),
+                                        requiredMembers.field("person_email", String.class))
+                                .from(requiredMembers)));
+    }
+
+    private CommonTableExpression<Record6<Long, Long, String, Long, String, String>> getExistingRecipientsCTE(CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys) {
+        return DSL
+                .name("existingRecipients")
+                .fields("survey_instance_id", "person_id", "entity_kind", "entity_id", "template_name", "person_email")
+                .as(DSL
+                        .select(sir.SURVEY_INSTANCE_ID,
+                                sir.PERSON_ID,
+                                inScopeSurveys.field(si.ENTITY_KIND),
+                                inScopeSurveys.field(si.ENTITY_ID),
+                                inScopeSurveys.field(st.NAME),
+                                p.EMAIL)
+                        .from(inScopeSurveys)
+                        .innerJoin(sir).on(inScopeSurveys.field(si.ID).eq(sir.SURVEY_INSTANCE_ID))
+                        .innerJoin(p).on(sir.PERSON_ID.eq(p.ID)));
+    }
+
+
+    private CommonTableExpression<Record6<Long, Long, String, Long, String, String>> getExistingOwnersCTE(CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys) {
+        return DSL
+                .name("existingOwners")
+                .fields("survey_instance_id", "person_id", "entity_kind", "entity_id", "template_name", "person_email")
+                .as(DSL
+                        .select(sio.SURVEY_INSTANCE_ID,
+                                sio.PERSON_ID,
+                                inScopeSurveys.field(si.ENTITY_KIND),
+                                inScopeSurveys.field(si.ENTITY_ID),
+                                inScopeSurveys.field(st.NAME),
+                                p.EMAIL)
+                        .from(inScopeSurveys)
+                        .innerJoin(sio).on(inScopeSurveys.field(si.ID).eq(sio.SURVEY_INSTANCE_ID))
+                        .innerJoin(p).on(sio.PERSON_ID.eq(p.ID)));
+    }
+
+    private CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> getInScopeSurveysCTE(Set<SurveyInstanceStatus> allowedSurveyStatuses) {
+        return DSL
+                .name("inScopeSurveys")
+                .as(DSL
+                        .select(si.ID, si.ENTITY_ID, si.ENTITY_KIND, sr.RECIPIENT_INVOLVEMENT_GROUP_ID, sr.OWNER_INVOLVEMENT_GROUP_ID, st.NAME)
+                        .from(sr)
+                        .innerJoin(st).on(sr.SURVEY_TEMPLATE_ID.eq(st.ID)
+                                .and(st.STATUS.eq(ReleaseLifecycleStatus.ACTIVE.name())))
+                        .innerJoin(si).on(sr.ID.eq(si.SURVEY_RUN_ID)
+                                .and(si.STATUS.in(allowedSurveyStatuses))));
+
+    }
+
+
+    public CommonTableExpression<Record6<Long, Long, String, Long, String, String>> getRequiredRecipientsCTE(CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys) {
+        return DSL
+                .name("requiredRecipients")
+                .fields("survey_instance_id", "person_id", "entity_kind", "entity_id", "template_name", "person_email")
+                .as(DSL
+                        .select(inScopeSurveys.field(si.ID),
+                                p.ID,
+                                inScopeSurveys.field(si.ENTITY_KIND),
+                                inScopeSurveys.field(si.ENTITY_ID),
+                                inScopeSurveys.field(st.NAME),
+                                p.EMAIL)
+                        .from(inScopeSurveys)
+                        .innerJoin(ig).on(inScopeSurveys.field(sr.RECIPIENT_INVOLVEMENT_GROUP_ID).eq(ig.ID))
+                        .innerJoin(ige).on(ig.ID.eq(ige.INVOLVEMENT_GROUP_ID))
+                        .innerJoin(i).on(ige.INVOLVEMENT_KIND_ID.eq(i.KIND_ID)
+                                .and(i.ENTITY_KIND.eq(inScopeSurveys.field(si.ENTITY_KIND))
+                                        .and(i.ENTITY_ID.eq(inScopeSurveys.field(si.ENTITY_ID)))))
+                        .innerJoin(p).on(i.EMPLOYEE_ID.eq(p.EMPLOYEE_ID)
+                                .and(p.IS_REMOVED.isFalse())));
+    }
+
+    private CommonTableExpression<Record6<Long, Long, String, Long, String, String>> getRequiredOwnersCTE(CommonTableExpression<Record6<Long, Long, String, Long, Long, String>> inScopeSurveys) {
+        return DSL
+                .name("requiredOwners")
+                .fields("survey_instance_id", "person_id", "entity_kind", "entity_id", "template_name", "person_email")
+                .as(DSL
+                        .select(inScopeSurveys.field(si.ID),
+                                p.ID,
+                                inScopeSurveys.field(si.ENTITY_KIND),
+                                inScopeSurveys.field(si.ENTITY_ID),
+                                inScopeSurveys.field(st.NAME),
+                                p.EMAIL)
+                        .from(inScopeSurveys)
+                        .innerJoin(ig).on(inScopeSurveys.field(sr.OWNER_INVOLVEMENT_GROUP_ID).eq(ig.ID))
+                        .innerJoin(ige).on(ig.ID.eq(ige.INVOLVEMENT_GROUP_ID))
+                        .innerJoin(i).on(ige.INVOLVEMENT_KIND_ID.eq(i.KIND_ID)
+                                .and(i.ENTITY_KIND.eq(inScopeSurveys.field(si.ENTITY_KIND))
+                                        .and(i.ENTITY_ID.eq(inScopeSurveys.field(si.ENTITY_ID)))))
+                        .innerJoin(p).on(i.EMPLOYEE_ID.eq(p.EMPLOYEE_ID)
+                                .and(p.IS_REMOVED.isFalse())));
     }
 }

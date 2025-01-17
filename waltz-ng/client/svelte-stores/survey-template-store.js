@@ -21,14 +21,35 @@ import {CORE_API} from "../common/services/core-api-utils";
 
 export function mkSurveyTemplateStore() {
 
-    const findAll  = (force = false) => remote.fetchViewList(
+    const findAll = (force = false) => remote.fetchViewList(
         "GET",
         "api/survey-template",
         [],
         {force});
 
+    const findByOwner = (force = false) => remote.fetchViewList(
+        "GET",
+        "api/survey-template/owner",
+        [],
+        {force});
+
+    const getByQuestionId = (id, force = false) => remote.fetchViewDatum(
+        "GET",
+        `api/survey-template/question-id/${id}`,
+        [],
+        {force});
+
+    const importFromJSON = (json, force = false) => remote.execute(
+        "POST",
+        `api/survey-template/json-import`,
+        json,
+        {force});
+
     return {
-        findAll
+        findAll,
+        findByOwner,
+        getByQuestionId,
+        importFromJSON
     };
 }
 

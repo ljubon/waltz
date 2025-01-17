@@ -32,7 +32,9 @@ import template from "./source-and-target-panel.html";
 import {sameRef} from "../../../common/entity-utils";
 import {appLogicalFlowFilterExcludedTagIdsKey} from "../../../user";
 import {loadFlowClassificationRatings} from "../../../flow-classification-rule/flow-classification-utils";
-
+import ImageDownloadLink from "../../../common/svelte/ImageDownloadLink.svelte";
+import FlowRatingCell from "../../../common/svelte/FlowRatingCell.svelte"
+import {flowDirection as FlowDirection} from "../../../common/services/enums/flow-direction";
 
 const bindings = {
     entityRef: "<",
@@ -41,7 +43,8 @@ const bindings = {
     decorators: "<",
     physicalFlows: "<",
     physicalSpecifications: "<",
-    tags: "<"
+    tags: "<",
+    ratingDirection: "<"
 };
 
 
@@ -64,7 +67,10 @@ const initialState = {
         tagFilterApplied: false
     },
     tags: [],
-    flowClassificationsByCode: []
+    flowClassificationsByCode: [],
+    ImageDownloadLink,
+    diagramElem: null,
+    FlowRatingCell
 };
 
 
@@ -120,6 +126,7 @@ function mkTypeInfo(decorators = [], dataTypes) {
             return {
                 id: x.decoratorEntity.id,
                 rating: x.rating,
+                inboundRating: x.targetInboundRating,
                 name: _.get(dataTypes, x.decoratorEntity.id).name
             };
         }))
@@ -220,17 +227,53 @@ function controller($element,
 
     vm.$onInit = () => {
         loadFlowClassificationRatings(serviceBroker)
-            .then(r => vm.flowClassificationsByCode = _.keyBy(r, d => d.code));
+            .then(r => {
+                vm.flowClassifications = r;
+
+                vm.inboundClassificationsByCode = _
+                    .chain(r)
+                    .filter(d => d.direction === FlowDirection.INBOUND.key)
+                    .keyBy(d => d.code)
+                    .value();
+                vm.outboundClassificationsByCode = _
+                    .chain(r)
+                    .filter(d => d.direction === FlowDirection.OUTBOUND.key)
+                    .keyBy(d => d.code)
+                    .value()
+
+                vm.flowClassificationsByCode = vm.ratingDirection === FlowDirection.INBOUND.key
+                    ? vm.inboundClassificationsByCode
+                    : vm.outboundClassificationsByCode;
+            });
 
         serviceBroker
             .loadViewData(CORE_API.DataTypeStore.findAll)
             .then(r => vm.dataTypes = _.keyBy(r.data, dt => dt.id));
+
+        vm.diagramElem = _.head($element.find("waltz-source-and-target-graph"));
     };
 
     vm.$onChanges = (changes) => {
 
         loadFlowClassificationRatings(serviceBroker)
-            .then(r => vm.flowClassificationsByCode = _.keyBy(r, d => d.code));
+            .then(r => {
+                vm.flowClassifications = r;
+
+                vm.inboundClassificationsByCode = _
+                    .chain(r)
+                    .filter(d => d.direction === FlowDirection.INBOUND.key)
+                    .keyBy(d => d.code)
+                    .value();
+                vm.outboundClassificationsByCode = _
+                    .chain(r)
+                    .filter(d => d.direction === FlowDirection.OUTBOUND.key)
+                    .keyBy(d => d.code)
+                    .value()
+
+                vm.flowClassificationsByCode = vm.ratingDirection === FlowDirection.INBOUND.key
+                    ? vm.inboundClassificationsByCode
+                    : vm.outboundClassificationsByCode;
+            });
 
         if (changes.logicalFlows || changes.decorators) {
             vm.resetNodeAndTypeFilter();
@@ -255,7 +298,7 @@ function controller($element,
 
         const logicalFlowsById = _.keyBy(vm.logicalFlows, "id");
 
-        function select(entity, type, logicalFlowId, evt) {
+        function select(serviceBroker, entity, type, logicalFlowId, evt) {
             const typeInfoByFlowId = mkTypeInfo(vm.decorators, vm.dataTypes);
             const types = typeInfoByFlowId[logicalFlowId] || [];
             const logicalFlow = logicalFlowsById[logicalFlowId];
@@ -267,6 +310,10 @@ function controller($element,
                 .value();
             const tagInfoByFlowId = mkTagInfo(vm.tags);
             const tags = tagInfoByFlowId[logicalFlowId] || [];
+
+            serviceBroker
+                .loadViewData(CORE_API.LogicalFlowStore.findPermissionsForFlow, [logicalFlowId])
+                .then(r => vm.canEditPhysical = _.some(r.data, d => _.includes(["ADD", "UPDATE", "REMOVE"], d)))
 
             return {
                 type,
@@ -285,13 +332,13 @@ function controller($element,
             source: {
                 onSelect: (entity, evt) => $scope.$applyAsync(() => {
                     const flowId = keyedLogicalFlows.sourceFlowsByEntityId[entity.id];
-                    vm.selected = select(entity, "source", flowId, evt);
+                    vm.selected = select(serviceBroker, entity, "source", flowId, evt);
                 })
             },
             target: {
                 onSelect: (entity, evt) => $scope.$applyAsync(() => {
                     const flowId = keyedLogicalFlows.targetFlowsByEntityId[entity.id];
-                    vm.selected = select(entity, "target", flowId, evt);
+                    vm.selected = select(serviceBroker, entity, "target", flowId, evt);
                 })
             },
             type: {
@@ -351,7 +398,11 @@ function controller($element,
             "Target",
             "Target code",
             "Data Types",
-            "Tags"
+            "Tags",
+            "Created At",
+            "Created By",
+            "Last Updated At",
+            "Last Updated By"
         ];
 
         const dataTypesByFlowId = _
@@ -410,7 +461,11 @@ function controller($element,
                         f.target.name,
                         resolveCode(f.target),
                         calcDataTypes(f.id),
-                        calcTags(f.id)
+                        calcTags(f.id),
+                        f.created.at,
+                        f.created.by,
+                        f.lastUpdatedAt,
+                        f.lastUpdatedBy
                     ]
                 });
 

@@ -40,8 +40,8 @@ function controller($q, serviceBroker) {
 
     const defaultColumnDefs = [
         withWidth(columnDef.name, "20%"),
+        withWidth(columnDef.specName, "20%"),
         columnDef.extId,
-        columnDef.observation,
         columnDef.format,
         columnDef.transport,
         columnDef.frequency,
@@ -49,13 +49,13 @@ function controller($q, serviceBroker) {
         columnDef.description
     ];
 
-    vm.$onInit = () => {
+    vm.$onChanges = () => {
 
         vm.columnDefs = _.isEmpty(vm.optionalColumnDefs)
             ? defaultColumnDefs
             : vm.optionalColumnDefs;
 
-        vm.tableData = fetchData(vm.parentEntityRef, $q, serviceBroker)
+        fetchData(vm.parentEntityRef, $q, serviceBroker)
             .then(data => vm.tableData = data);
 
         vm.selectorOptions = mkSelectionOptions(

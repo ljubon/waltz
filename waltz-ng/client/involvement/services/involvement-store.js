@@ -25,11 +25,6 @@ function store($http, BaseApiUrl) {
     const BASE = `${BaseApiUrl}/involvement`;
 
 
-    const findAppsForEmployeeId = (employeeId) =>
-        $http.get(`${BASE}/employee/${employeeId}/applications`)
-            .then(result => result.data);
-
-
     const findByEmployeeId = (employeeId) =>
         $http.get(`${BASE}/employee/${employeeId}`)
             .then(result => result.data);
@@ -50,9 +45,17 @@ function store($http, BaseApiUrl) {
 
 
     const findPeopleByEntityReference = (kind, id) => {
-        const ref = _.isObject(kind) ? kind : { id, kind };
+        const ref = _.isObject(kind) ? kind : {id, kind};
 
         return $http.get(`${BASE}/entity/${ref.kind}/${ref.id}/people`)
+            .then(result => result.data);
+    };
+
+
+    const findExistingInvolvementKindIdsForUser = (kind, id) => {
+        const ref = _.isObject(kind) ? kind : {id, kind};
+
+        return $http.get(`${BASE}/entity/${ref.kind}/${ref.id}/user`)
             .then(result => result.data);
     };
 
@@ -72,14 +75,30 @@ function store($http, BaseApiUrl) {
     };
 
 
+    const countOrphanInvolvementsForKind = (entityKind) => {
+        return $http
+            .get(`${BASE}/entity-kind/${entityKind}/orphan-count`, entityKind)
+            .then(r => r.data);
+    };
+
+
+    const cleanupOrphansForKind = (entityKind) => {
+        return $http
+            .delete(`${BASE}/entity-kind/${entityKind}/cleanup-orphans`, entityKind)
+            .then(r => r.data);
+    };
+
+
     return {
-        findAppsForEmployeeId,
         findByEmployeeId,
         findByEntityReference,
         findBySelector,
         findPeopleByEntityReference,
         findPeopleBySelector,
-        changeInvolvement
+        findExistingInvolvementKindIdsForUser,
+        changeInvolvement,
+        countOrphanInvolvementsForKind,
+        cleanupOrphansForKind
     };
 }
 
@@ -91,11 +110,6 @@ const serviceName = "InvolvementStore";
 
 
 export const InvolvementStore_API = {
-    findAppsForEmployeeId: {
-        serviceName,
-        serviceFnName: "findAppsForEmployeeId",
-        description: "finds apps by employee id"
-    },
     findByEmployeeId: {
         serviceName,
         serviceFnName: "findByEmployeeId",
@@ -105,6 +119,11 @@ export const InvolvementStore_API = {
         serviceName,
         serviceFnName: "findByEntityReference",
         description: "find involvements by entity reference"
+    },
+    findExistingInvolvementKindIdsForUser: {
+        serviceName,
+        serviceFnName: "findExistingInvolvementKindIdsForUser",
+        description: "find involvement kind ids by entity reference for user"
     },
     findBySelector: {
         serviceName,
@@ -125,6 +144,16 @@ export const InvolvementStore_API = {
         serviceName,
         serviceFnName: "changeInvolvement",
         description: "change person involvement for a given entity reference"
+    },
+    countOrphanInvolvementsForKind: {
+        serviceName,
+        serviceFnName: "countOrphanInvolvementsForKind",
+        description: "count of involvements where entity no longer exists for a given entity kind"
+    },
+    cleanupOrphansForKind: {
+        serviceName,
+        serviceFnName: "cleanupOrphansForKind",
+        description: "cleanup involvements for a given entity kind"
     }
 };
 

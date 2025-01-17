@@ -3,21 +3,15 @@
     import ReportGridOverview from "./ReportGridOverview.svelte";
     import ReportGridFilters from "./ReportGridFilters.svelte";
     import ColumnDefinitionEditPanel from "./column-definition-edit-panel/ColumnDefinitionEditPanel.svelte";
-    import {selectedGrid, ownedReportIds} from "./report-grid-store";
-    import {reportGridStore} from "../../../svelte-stores/report-grid-store";
-    import _ from "lodash";
     import Icon from "../../../common/svelte/Icon.svelte";
     import ReportGridPersonEditPanel from "./person-edit-panel/ReportGridPersonEditPanel.svelte";
+    import {gridService} from "./report-grid-service";
+    import {tabs} from "./report-grid-ui-service";
 
     export let onGridSelect = () => console.log("selecting grid");
-    export let onSave = () => console.log("Saved report grid");
+    export let primaryEntityRef;
 
-    const tabs = {
-        OVERVIEW: 'overview',
-        FILTERS: 'filters',
-        COLUMNS: 'columns',
-        PEOPLE: 'people'
-    };
+    const {gridDefinition, userRole} = gridService;
 
     let selectedTab = tabs.OVERVIEW;
 
@@ -28,15 +22,13 @@
         onGridSelect(selectedGrid);
     }
 
-    $: isOwned = $selectedGrid && _.includes($ownedReportIds, $selectedGrid?.definition?.id);
-
-    $: ownedGridsCall = $selectedGrid?.definition?.id && reportGridStore.findForOwner(true);
-    $: $ownedReportIds = _.map($ownedGridsCall?.data, d => d.id);
+    $: isOwned = $userRole === "OWNER";
 
 </script>
 
 <div class="waltz-tabs" style="padding-top: 1em">
     <!-- TAB HEADERS -->
+
     <input type="radio"
            bind:group={selectedTab}
            value={tabs.OVERVIEW}
@@ -45,13 +37,14 @@
            for="overview">
         <span>
             Overview
+            {#if $gridDefinition}{` - ${$gridDefinition.name}`}{/if}
         </span>
     </label>
 
     <input type="radio"
            bind:group={selectedTab}
            value={tabs.FILTERS}
-           disabled={!$selectedGrid}
+           disabled={!$gridDefinition}
            id="filters">
     <label class="wt-label"
            for="filters">
@@ -87,15 +80,14 @@
     </label>
 
     <div class="wt-tab wt-active">
-        <!-- SERVERS -->
         {#if selectedTab === 'overview'}
-            <ReportGridOverview onGridSelect={handleGridSelect}/>
+            <ReportGridOverview onGridSelect={handleGridSelect}
+                                {primaryEntityRef}/>
         {:else if selectedTab === 'filters'}
-            <ReportGridFilters/>
+            <ReportGridFilters {primaryEntityRef}/>
         {:else if selectedTab === 'columns'}
-            <ColumnDefinitionEditPanel gridId={$selectedGrid?.definition?.id}
-                                       columnDefs={$selectedGrid?.definition?.columnDefinitions}
-                                       onSave={onSave}/>
+            <ColumnDefinitionEditPanel gridId={$gridDefinition?.id}
+                                       columnDefs={$gridDefinition?.columnDefinitions}/>
         {:else if selectedTab === 'people'}
             <ReportGridPersonEditPanel/>
         {/if}

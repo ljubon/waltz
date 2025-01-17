@@ -18,8 +18,8 @@
 
 package org.finos.waltz.web.endpoints.api;
 
+import org.finos.waltz.web.HttpHeader;
 import org.finos.waltz.web.endpoints.Endpoint;
-import org.eclipse.jetty.http.HttpHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -80,6 +80,7 @@ public class StaticResourcesEndpoint implements Endpoint {
                     OutputStream out = response
                             .raw()
                             .getOutputStream();
+
                     copyStream(modifiedStream, out);
                     out.flush();
 
@@ -104,7 +105,7 @@ public class StaticResourcesEndpoint implements Endpoint {
      */
     private void addCacheHeadersIfNeeded(Response response, String resolvedPath) {
         if (! resolvedPath.endsWith(".html")) {
-            response.header(HttpHeader.CACHE_CONTROL.toString(), CACHE_MAX_AGE_VALUE);
+            response.header(HttpHeader.CACHE_CONTROL, CACHE_MAX_AGE_VALUE);
         }
     }
 
@@ -130,7 +131,11 @@ public class StaticResourcesEndpoint implements Endpoint {
 
                 if (line.contains("<base href=")) {
                     LOG.info("Found <base> tag: " + line + ", adding context path: " + request.contextPath());
-                    line = String.format("\t<base href=\"%s/\" />", request.contextPath());
+                    line = line.replaceFirst(
+                            "<base href=(['\"])/(['\"])\\s*/>",
+                            format(
+                                "\t<base href=\"%s/\" />",
+                                request.contextPath()));
                     LOG.info("Updated <base> tag: " + line);
                     lines.set(i, line);
 
@@ -154,8 +159,7 @@ public class StaticResourcesEndpoint implements Endpoint {
                 }
 
                 writer.flush();
-                ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-                return inputStream;
+                return new ByteArrayInputStream(outputStream.toByteArray());
             }
         }
         return resourceStream;

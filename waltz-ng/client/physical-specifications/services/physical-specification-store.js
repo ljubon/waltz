@@ -31,6 +31,13 @@ export function store($http, baseApiUrl) {
     };
 
 
+    const findByExternalId = (externalId) => {
+        return $http
+            .get(`${base}/external-id/${externalId}`)
+            .then(r => r.data);
+    };
+
+
     const findBySelector = (options) => {
         checkIsIdSelector(options);
         return $http
@@ -51,23 +58,34 @@ export function store($http, baseApiUrl) {
         .then(r => r.data);
 
 
+    const findPermissionsForSpec = (specificationId) => $http
+        .get(`${base}/id/${specificationId}/permissions`)
+        .then(r => r.data);
+
     const search = (terms) => $http
         .post(`${base}/search`, terms)
         .then(r => r.data);
 
 
     const deleteById = (specificationId) => $http
-            .delete(`${base}/${specificationId}`)
-            .then(r => r.data);
+        .delete(`${base}/${specificationId}`)
+        .then(r => r.data);
+
+    const updateAttribute = (flowId, command) => $http
+        .post(`${base}/id/${flowId}/attribute`, command)
+        .then(r => r.data);
 
 
     return {
         findByEntityReference,
         findBySelector,
         findByIds,
+        findByExternalId,
         getById,
         deleteById,
-        search
+        search,
+        updateAttribute,
+        findPermissionsForSpec
     };
 }
 
@@ -97,6 +115,11 @@ export const PhysicalSpecificationStore_API = {
         serviceFnName: "findByIds",
         description: "executes findByIds"
     },
+    findByExternalId: {
+        serviceName,
+        serviceFnName: "findByExternalId",
+        description: "executes findByExternalId"
+    },
     getById: {
         serviceName,
         serviceFnName: "getById",
@@ -112,4 +135,14 @@ export const PhysicalSpecificationStore_API = {
         serviceFnName: "search",
         description: "executes search"
     },
+    updateAttribute: {
+        serviceName,
+        serviceFnName: "updateAttribute",
+        description: "executes updateAttribute"
+    },
+    findPermissionsForSpec: {
+        serviceName,
+        serviceFnName: "findPermissionsForSpec",
+        description: "returns permissions for spec"
+    }
 };

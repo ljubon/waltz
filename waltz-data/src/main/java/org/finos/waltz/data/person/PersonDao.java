@@ -18,14 +18,20 @@
 
 package org.finos.waltz.data.person;
 
+import org.finos.waltz.model.EntityKind;
+import org.finos.waltz.model.EntityReference;
 import org.finos.waltz.schema.tables.records.PersonRecord;
 import org.finos.waltz.model.person.ImmutablePerson;
 import org.finos.waltz.model.person.Person;
 import org.finos.waltz.model.person.PersonKind;
+import org.jooq.Condition;
 import org.jooq.DSLContext;
 import org.jooq.Field;
 import org.jooq.Record;
+import org.jooq.Record1;
 import org.jooq.RecordMapper;
+import org.jooq.Select;
+import org.jooq.SelectSeekStep1;
 import org.jooq.impl.DSL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +44,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.finos.waltz.model.EntityReference.mkRef;
+import static org.finos.waltz.schema.Tables.USER_ROLE;
 import static org.finos.waltz.schema.tables.AttestationInstanceRecipient.ATTESTATION_INSTANCE_RECIPIENT;
 import static org.finos.waltz.schema.tables.Person.PERSON;
 import static org.finos.waltz.schema.tables.PersonHierarchy.PERSON_HIERARCHY;
@@ -110,7 +118,11 @@ public class PersonDao {
                 .limit(1)
                 .fetchOne(personMapper);
     }
-
+    public List<String> findAllEmails(){
+        return dsl.select(PERSON.EMAIL)
+                .from(PERSON)
+                .fetch(PERSON.EMAIL);
+    }
 
     public Person getActiveByUserEmail(String email) {
         checkNotEmpty(email, "Cannot find person without a email");
@@ -244,4 +256,46 @@ public class PersonDao {
                         .and(PERSON.IS_REMOVED.isFalse()))
                 .fetchSet(personMapper);
     }
+
+
+    public Set<Person> findActivePeopleByUserRole(String role) {
+        return dsl
+                .select(PERSON.fields())
+                .from(USER_ROLE)
+                .innerJoin(PERSON).on(PERSON.EMAIL.eq(USER_ROLE.USER_NAME)
+                        .and(PERSON.IS_REMOVED.isFalse()))
+                .where(USER_ROLE.ROLE.eq(role))
+                .fetchSet(personMapper);
+    }
+
+
+    public List<Person> findDirectsForPersonIds(List<Long> personIds) {
+        Condition cond = PERSON.MANAGER_EMPLOYEE_ID.in(DSL
+                            .select(PERSON.EMPLOYEE_ID)
+                            .from(PERSON)
+                            .where(PERSON.ID.in(personIds)))
+                    .andNot(PERSON.IS_REMOVED);
+
+        SelectSeekStep1<Record, String> qry = dsl
+                .select(PERSON.fields())
+                .from(PERSON)
+                .where(dsl.renderInlined(cond))
+                .orderBy(PERSON.DISPLAY_NAME);
+
+        return qry
+                .fetch(personMapper);
+    }
+
+
+    public List<EntityReference> findByPersonIdSelectorAsEntityReference(Select<Record1<Long>> selector) {
+        return dsl
+                .select(PERSON.DISPLAY_NAME, PERSON.ID)
+                .from(PERSON)
+                .where(PERSON.ID.in(selector))
+                .fetch(r -> mkRef(
+                        EntityKind.PERSON,
+                        r.get(PERSON.ID),
+                        r.get(PERSON.DISPLAY_NAME)));
+    }
+
 }

@@ -2,15 +2,20 @@ package org.finos.waltz.integration_test.inmem.service;
 
 import org.finos.waltz.common.DateTimeUtilities;
 import org.finos.waltz.common.ListUtilities;
+import org.finos.waltz.common.exception.InsufficientPrivelegeException;
 import org.finos.waltz.integration_test.inmem.BaseInMemoryIntegrationTest;
-import org.finos.waltz.integration_test.inmem.helpers.*;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.EntityReference;
 import org.finos.waltz.model.IdSelectionOptions;
+import org.finos.waltz.model.ReleaseLifecycleStatus;
 import org.finos.waltz.model.survey.*;
 import org.finos.waltz.service.survey.SurveyInstanceService;
 import org.finos.waltz.service.survey.SurveyRunService;
-import org.junit.Test;
+import org.finos.waltz.test_common.helpers.AppHelper;
+import org.finos.waltz.test_common.helpers.InvolvementHelper;
+import org.finos.waltz.test_common.helpers.PersonHelper;
+import org.finos.waltz.test_common.helpers.SurveyTemplateHelper;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
@@ -22,7 +27,7 @@ import static org.finos.waltz.common.DateTimeUtilities.nowUtcTimestamp;
 import static org.finos.waltz.common.DateTimeUtilities.toLocalDate;
 import static org.finos.waltz.common.SetUtilities.asSet;
 import static org.finos.waltz.common.SetUtilities.fromCollection;
-import static org.finos.waltz.integration_test.inmem.helpers.NameHelper.mkName;
+import static org.finos.waltz.test_common.helpers.NameHelper.mkName;
 import static org.junit.Assert.assertEquals;
 
 public class SurveyInstanceResponseCopyTest extends BaseInMemoryIntegrationTest {
@@ -47,7 +52,7 @@ public class SurveyInstanceResponseCopyTest extends BaseInMemoryIntegrationTest 
 
 
     @Test
-    public void copyResponses() {
+    public void copyResponses() throws InsufficientPrivelegeException {
 
         EntityReference a1 = appHelper.createNewApp(mkName("copyResponses"), ouIds.a);
         EntityReference a2 = appHelper.createNewApp(mkName("copyResponses"), ouIds.a);
@@ -57,6 +62,7 @@ public class SurveyInstanceResponseCopyTest extends BaseInMemoryIntegrationTest 
 
         long templateId = templateHelper.createTemplate(username, mkName("copyResponses"));
         long qId = templateHelper.addQuestion(templateId);
+        templateHelper.updateStatus(username, templateId, ReleaseLifecycleStatus.ACTIVE);
 
         long invKindId = involvementHelper.mkInvolvementKind(mkName("invKind"));
         involvementHelper.createInvolvement(personId, invKindId, a1);

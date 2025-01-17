@@ -18,7 +18,8 @@
 import _ from "lodash";
 import {nest} from "d3-collection";
 import {ascending} from "d3-array";
-import template from './survey-template-list.html';
+import template from "./survey-template-list.html";
+import {termSearch} from "../common";
 
 
 function processTemplates(templates = []) {
@@ -36,7 +37,7 @@ function loadOwners(holder, personStore, templates = []) {
 
     const personIds = _
         .chain(templates)
-        .map('ownerId')
+        .map("ownerId")
         .uniq()
         .value();
 
@@ -54,24 +55,38 @@ function controller(personStore, surveyTemplateStore) {
     const vm = this;
 
     surveyTemplateStore
-        .findAll()
+        .findByOwner()
         .then(ts => {
+            vm.templates = ts;
             vm.groupedTemplates = processTemplates(ts);
             loadOwners(vm, personStore, ts)
         });
 
+    vm.doSearch = (qry) => {
+        const templates = _.isEmpty(qry)
+            ? vm.templates
+            : termSearch(
+                vm.templates,
+                qry,
+                [
+                    "name",
+                    "description",
+                    "externalId"
+                ]);
+        vm.groupedTemplates = processTemplates(templates);
+    }
 }
 
 
 controller.$inject = [
-    'PersonStore',
-    'SurveyTemplateStore'
+    "PersonStore",
+    "SurveyTemplateStore"
 ];
 
 
 const page = {
     controller,
-    controllerAs: 'ctrl',
+    controllerAs: "ctrl",
     template
 };
 

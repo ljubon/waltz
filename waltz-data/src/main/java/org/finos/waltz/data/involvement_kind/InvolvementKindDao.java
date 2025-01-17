@@ -18,17 +18,26 @@
 
 package org.finos.waltz.data.involvement_kind;
 
-import org.finos.waltz.schema.tables.records.InvolvementKindRecord;
 import org.finos.waltz.common.DateTimeUtilities;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.UserTimestamp;
 import org.finos.waltz.model.involvement_kind.ImmutableInvolvementKind;
+import org.finos.waltz.model.involvement_kind.ImmutableInvolvementKindUsageStat;
+import org.finos.waltz.model.involvement_kind.ImmutableStat;
 import org.finos.waltz.model.involvement_kind.InvolvementKind;
 import org.finos.waltz.model.involvement_kind.InvolvementKindChangeCommand;
 import org.finos.waltz.model.involvement_kind.InvolvementKindCreateCommand;
+import org.finos.waltz.model.involvement_kind.InvolvementKindUsageStat;
+import org.finos.waltz.schema.tables.Involvement;
+import org.finos.waltz.schema.tables.Person;
+import org.finos.waltz.schema.tables.records.InvolvementKindRecord;
+import org.jooq.CommonTableExpression;
 import org.jooq.DSLContext;
+import org.jooq.Field;
 import org.jooq.Record;
+import org.jooq.Record4;
 import org.jooq.RecordMapper;
+import org.jooq.SelectHavingStep;
 import org.jooq.exception.NoDataFoundException;
 import org.jooq.impl.DSL;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,14 +45,23 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toSet;
+import static org.finos.waltz.common.Checks.checkNotNull;
+import static org.finos.waltz.common.Checks.checkOptionalIsPresent;
+import static org.finos.waltz.common.SetUtilities.filter;
+import static org.finos.waltz.common.SetUtilities.fromCollection;
+import static org.finos.waltz.model.EntityReference.mkRef;
+import static org.finos.waltz.schema.Tables.PERSON;
 import static org.finos.waltz.schema.tables.Involvement.INVOLVEMENT;
 import static org.finos.waltz.schema.tables.InvolvementKind.INVOLVEMENT_KIND;
 import static org.finos.waltz.schema.tables.KeyInvolvementKind.KEY_INVOLVEMENT_KIND;
-import static org.finos.waltz.common.Checks.checkNotNull;
-import static org.finos.waltz.common.Checks.checkOptionalIsPresent;
 
 @Repository
 public class InvolvementKindDao {
@@ -60,6 +78,10 @@ public class InvolvementKindDao {
                 .externalId(Optional.ofNullable(record.getExternalId()))
                 .lastUpdatedAt(DateTimeUtilities.toLocalDateTime(record.getLastUpdatedAt()))
                 .lastUpdatedBy(record.getLastUpdatedBy())
+                .userSelectable(record.getUserSelectable())
+                .subjectKind(EntityKind.valueOf(record.getSubjectKind()))
+                .permittedRole(record.getPermittedRole())
+                .transitive(record.getTransitive())
                 .build();
     };
 
@@ -71,6 +93,10 @@ public class InvolvementKindDao {
         record.setDescription(ik.description());
         record.setLastUpdatedAt(Timestamp.valueOf(ik.lastUpdatedAt()));
         record.setLastUpdatedBy(ik.lastUpdatedBy());
+        record.setUserSelectable(ik.userSelectable());
+        record.setSubjectKind(ik.subjectKind().name());
+        record.setPermittedRole(ik.permittedRole());
+        record.setTransitive(ik.transitive());
 
         ik.externalId().ifPresent(record::setExternalId);
         ik.id().ifPresent(record::setId);
@@ -91,23 +117,19 @@ public class InvolvementKindDao {
 
 
     public List<InvolvementKind> findAll() {
-        return dsl.select(involvementKind.fields())
+        return dsl
+                .select(involvementKind.fields())
                 .from(involvementKind)
                 .fetch(TO_DOMAIN_MAPPER);
     }
 
 
     public InvolvementKind getById(long id) {
-        InvolvementKindRecord record = dsl.select(INVOLVEMENT_KIND.fields())
+        return dsl
+                .select(INVOLVEMENT_KIND.fields())
                 .from(INVOLVEMENT_KIND)
                 .where(INVOLVEMENT_KIND.ID.eq(id))
-                .fetchOneInto(InvolvementKindRecord.class);
-
-        if(record == null) {
-            throw new NoDataFoundException("Could not find Involvement Kind record with id: " + id);
-        }
-
-        return TO_DOMAIN_MAPPER.map(record);
+                .fetchOne(TO_DOMAIN_MAPPER);
     }
 
 
@@ -119,6 +141,8 @@ public class InvolvementKindDao {
         record.setDescription(command.description());
         record.setLastUpdatedBy(username);
         record.setLastUpdatedAt(Timestamp.valueOf(DateTimeUtilities.nowUtc()));
+        record.setSubjectKind(command.subjectKind().name());
+        record.setPermittedRole(command.permittedRole());
 
         command.externalId().ifPresent(record::setExternalId);
 
@@ -149,8 +173,12 @@ public class InvolvementKindDao {
 
         command.name().ifPresent(change -> record.setName(change.newVal()));
         command.description().ifPresent(change -> record.setDescription(change.newVal()));
+        command.externalId().ifPresent(change -> record.setExternalId(change.newVal()));
+        command.userSelectable().ifPresent(change -> record.setUserSelectable(change.newVal()));
+        command.permittedRole().ifPresent(change -> record.setPermittedRole(change.newVal()));
+        command.transitive().ifPresent(change -> record.setTransitive(change.newVal()));
 
-        UserTimestamp lastUpdate = command.lastUpdate().get();
+        UserTimestamp lastUpdate = command.lastUpdate().orElseThrow(() -> new IllegalStateException("InvolvementChangeCommand must have a last update timestamp"));
         record.setLastUpdatedAt(Timestamp.valueOf(lastUpdate.at()));
         record.setLastUpdatedBy(lastUpdate.by());
 
@@ -159,7 +187,8 @@ public class InvolvementKindDao {
 
 
     public boolean deleteIfNotUsed(long id) {
-        return dsl.deleteFrom(INVOLVEMENT_KIND)
+        return dsl
+                .deleteFrom(INVOLVEMENT_KIND)
                 .where(INVOLVEMENT_KIND.ID.eq(id))
                 .and(DSL.notExists(DSL
                         .select(INVOLVEMENT.fields())
@@ -169,4 +198,119 @@ public class InvolvementKindDao {
     }
 
 
+    public Set<InvolvementKindUsageStat> loadUsageStats() {
+
+        org.finos.waltz.schema.tables.InvolvementKind ik = INVOLVEMENT_KIND;
+        Involvement inv = INVOLVEMENT;
+        Person p = PERSON;
+
+        CommonTableExpression<Record4<Long, String, Boolean, Integer>> userStatsCTE = DSL
+                .name("user_stats")
+                .as(DSL.select(ik.ID, inv.ENTITY_KIND, p.IS_REMOVED, DSL.countDistinct(inv.EMPLOYEE_ID).as("person_count"))
+                        .from(inv)
+                        .innerJoin(ik).on(ik.ID.eq(inv.KIND_ID))
+                        .innerJoin(p).on(p.EMPLOYEE_ID.eq(inv.EMPLOYEE_ID))
+                        .groupBy(ik.ID, inv.ENTITY_KIND, p.IS_REMOVED));
+
+        Field<Long> invKindIdField = userStatsCTE.field(0, Long.class);
+        Field<String> entityKindField = userStatsCTE.field(1, String.class);
+        Field<Boolean> personIsRemovedField = userStatsCTE.field(2, Boolean.class);
+        Field<Integer> personCountField = userStatsCTE.field(3, Integer.class);
+
+        return dsl
+                .with(userStatsCTE)
+                .select(ik.fields())
+                .select(entityKindField,
+                        personIsRemovedField,
+                        personCountField)
+                .from(ik)
+                .leftJoin(userStatsCTE).on(invKindIdField.eq(ik.ID))
+                .fetch()
+                .stream()
+                .collect(groupingBy(
+                        InvolvementKindDao.TO_DOMAIN_MAPPER::map,
+                        mapping(
+                                r -> r.get(entityKindField) == null
+                                        ? null
+                                        : ImmutableStat
+                                        .builder()
+                                        .entityKind(EntityKind.valueOf(r.get(entityKindField)))
+                                        .isCountOfRemovedPeople(r.get(personIsRemovedField))
+                                        .personCount(r.get(personCountField))
+                                        .build(),
+                                toSet())))
+                .entrySet()
+                .stream()
+                .map(e -> {
+                    Set<InvolvementKindUsageStat.Stat> stats = filter(
+                            fromCollection(e.getValue()),
+                            Objects::nonNull);
+
+                    return ImmutableInvolvementKindUsageStat
+                            .builder()
+                            .breakdown(stats)
+                            .involvementKind(e.getKey())
+                            .build();
+                })
+                .collect(toSet());
+    }
+
+
+    public InvolvementKindUsageStat loadUsageStatsForKind(Long kindId) {
+
+        org.finos.waltz.schema.tables.InvolvementKind ik = INVOLVEMENT_KIND;
+        Involvement inv = INVOLVEMENT;
+        Person p = PERSON;
+
+        InvolvementKind involvementKind = dsl
+                .select(ik.fields())
+                .from(ik)
+                .where(ik.ID.eq(kindId))
+                .fetchOne(InvolvementKindDao.TO_DOMAIN_MAPPER);
+
+        SelectHavingStep<Record4<Long, String, Boolean, Integer>> qry = dsl
+                .select(ik.ID, inv.ENTITY_KIND, p.IS_REMOVED, DSL.countDistinct(inv.EMPLOYEE_ID).as("person_count"))
+                .from(inv)
+                .innerJoin(ik).on(ik.ID.eq(inv.KIND_ID))
+                .innerJoin(p).on(p.EMPLOYEE_ID.eq(inv.EMPLOYEE_ID))
+                .where(ik.ID.eq(kindId))
+                .groupBy(ik.ID, inv.ENTITY_KIND, p.IS_REMOVED);
+
+        Set<InvolvementKindUsageStat.Stat> statsForKind = qry
+                .fetch()
+                .stream()
+                .map(r -> {
+                    String entityKind = r.get(inv.ENTITY_KIND);
+
+                    return entityKind == null
+                            ? null
+                            : ImmutableStat
+                            .builder()
+                                .entityKind(EntityKind.valueOf(entityKind))
+                                .isCountOfRemovedPeople(r.get(p.IS_REMOVED))
+                                .personCount(r.get("person_count", Integer.class))
+                                .build();
+                })
+                .filter(Objects::nonNull)
+                .collect(toSet());
+
+        return ImmutableInvolvementKindUsageStat.builder()
+                .involvementKind(involvementKind)
+                .breakdown(statsForKind)
+                .build();
+    }
+
+    public InvolvementKind getByExternalId(String externalId) {
+        InvolvementKindRecord record = dsl
+                .select(INVOLVEMENT_KIND.fields())
+                .from(INVOLVEMENT_KIND)
+                .where(INVOLVEMENT_KIND.EXTERNAL_ID.eq(externalId))
+                .fetchOneInto(InvolvementKindRecord.class);
+
+        if (record == null) {
+            throw new NoDataFoundException("Could not find Involvement Kind record with external id: " + externalId);
+        }
+
+        return TO_DOMAIN_MAPPER.map(record);
+    }
 }

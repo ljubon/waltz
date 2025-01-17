@@ -5,29 +5,50 @@
     import {surveyTemplateStore} from "../../../../svelte-stores/survey-template-store";
     import {surveyQuestionStore} from "../../../../svelte-stores/survey-question-store";
     import _ from "lodash";
+    import Toggle from "../../../../common/svelte/Toggle.svelte";
+    import {mkReportGridFixedColumnRef} from "../report-grid-utils";
 
     export let onSelect = () => console.log("Selecting involvement kind");
     export let selectionFilter = () => true;
+    export let subjectKindFilter = () => true;
 
     let selectedTemplate = null;
+    let showActiveOnly = true;
 
     $: templatesCall = surveyTemplateStore.findAll();
-    $: templates = _.orderBy($templatesCall.data, d => d.name);
+
+    $: templates = _
+        .chain($templatesCall?.data)
+        .filter(d => subjectKindFilter(d.targetEntityKind))
+        .filter(r => !showActiveOnly || r.status === 'ACTIVE')
+        .orderBy(d => d.name)
+        .value();
 
     $: questionsCall = selectedTemplate && surveyQuestionStore.findQuestionsForTemplate(selectedTemplate?.id)
     $: questions = $questionsCall?.data || [];
 
-    $: rowData = _.filter(questions, selectionFilter)
+    $: showSectionName = _.some(questions, d => !_.isEmpty(d.sectionName))
 
-    const columnDefs = [
-        { field: "questionText", name: "Question", width: "40%"},
-        { field: "label", name: "Label", width: "40%"},
-        { field: "fieldType", name: "Type", width: "20%"},
-    ];
+    $: rowData = _
+        .chain(questions)
+        .filter(d => selectionFilter(mkReportGridFixedColumnRef(d, "questionText")))
+        .value();
+
+    const sectionCols = [{field: "sectionName", name: "Section", width: "40%"}];
+
+
+    const defaultColumnDefs = [
+        {field: 'questionText', name: 'Question', width: '40%'},
+        {field: "label", name: "Label", width: "40%"},
+        {field: "fieldType", name: "Type", width: "20%"}];
+
+    $: columnDefs = showSectionName
+        ? _.concat(sectionCols, defaultColumnDefs)
+        : defaultColumnDefs
 
     const templateColumnDefs = [
-        { field: "name", name: "Name", width: "40%"},
-        { field: "description", name: "Description", width: "60%", maxLength: 300},
+        {field: "name", name: "Survey Name", width: "40%"},
+        {field: "description", name: "Description", width: "60%", maxLength: 300},
     ];
 
     function selectTemplate(template) {
@@ -51,12 +72,17 @@
     <p>Questions for template: <strong>{selectedTemplate.name}</strong></p>
     <Grid {columnDefs}
           {rowData}
-          onSelectRow={onSelect}/>
+          onSelectRow={d => onSelect(mkReportGridFixedColumnRef(d, "questionText"))}/>
 {:else}
     <div class="help-block small">
-        <Icon name="info-circle"/>Select a template from the list below, you can filter the list using the search bar.
+        <Icon name="info-circle"/>
+        Select a template from the list below, you can filter the list using the search bar.
     </div>
     <br>
+    <Toggle labelOn="Active Templates Only"
+            labelOff="Active Templates Only"
+            state={showActiveOnly}
+            onToggle={() => showActiveOnly = !showActiveOnly}/>
     <Grid columnDefs={templateColumnDefs}
           rowData={templates}
           onSelectRow={selectTemplate}/>

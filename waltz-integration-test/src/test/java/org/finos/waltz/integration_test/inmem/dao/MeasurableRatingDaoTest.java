@@ -21,15 +21,13 @@ package org.finos.waltz.integration_test.inmem.dao;
 import org.finos.waltz.common.exception.NotFoundException;
 import org.finos.waltz.data.measurable_rating.MeasurableRatingDao;
 import org.finos.waltz.integration_test.inmem.BaseInMemoryIntegrationTest;
-import org.finos.waltz.integration_test.inmem.helpers.AppHelper;
-import org.finos.waltz.integration_test.inmem.helpers.MeasurableHelper;
 import org.finos.waltz.model.*;
 import org.finos.waltz.model.measurable_rating.ImmutableSaveMeasurableRatingCommand;
 import org.finos.waltz.model.measurable_rating.MeasurableRating;
-import org.finos.waltz.schema.Tables;
+import org.finos.waltz.test_common.helpers.AppHelper;
+import org.finos.waltz.test_common.helpers.MeasurableHelper;
 import org.jooq.DSLContext;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
@@ -40,7 +38,8 @@ import static org.finos.waltz.common.CollectionUtilities.first;
 import static org.finos.waltz.model.EntityReference.mkRef;
 import static org.finos.waltz.model.IdSelectionOptions.mkOpts;
 import static org.finos.waltz.schema.tables.MeasurableRating.MEASURABLE_RATING;
-import static org.junit.Assert.assertThrows;
+import static org.finos.waltz.test_common.helpers.NameHelper.mkName;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MeasurableRatingDaoTest extends BaseInMemoryIntegrationTest {
 
@@ -56,14 +55,6 @@ public class MeasurableRatingDaoTest extends BaseInMemoryIntegrationTest {
     @Autowired
     private DSLContext dsl;
 
-    @Before
-    public void beforeMeasurableRatingTests() {
-        dsl.deleteFrom(Tables.MEASURABLE_RATING).execute();
-        dsl.deleteFrom(Tables.APPLICATION).execute();
-        dsl.deleteFrom(Tables.MEASURABLE).execute();
-        dsl.deleteFrom(Tables.MEASURABLE_CATEGORY).execute();
-    }
-
 
     @Test
     public void ratingsAreEmptyIfNoneAreAssociatedToAnApp() {
@@ -74,8 +65,8 @@ public class MeasurableRatingDaoTest extends BaseInMemoryIntegrationTest {
 
     @Test
     public void ratingsCanBeSaved() {
-        long categoryId = measurableHelper.createMeasurableCategory("mc");
-        long m1Id = measurableHelper.createMeasurable("m1", categoryId);
+        long categoryId = measurableHelper.createMeasurableCategory(mkName("mc"));
+        long m1Id = measurableHelper.createMeasurable(mkName("m1"), categoryId);
 
         EntityReference appRef = mkNewAppRef();
         mkRatings(appRef, m1Id);
@@ -88,8 +79,8 @@ public class MeasurableRatingDaoTest extends BaseInMemoryIntegrationTest {
 
     @Test
     public void readOnlyRatingsCannotBeSaved() {
-        long categoryId = measurableHelper.createMeasurableCategory("mc");
-        long m1Id = measurableHelper.createMeasurable("m1", categoryId);
+        long categoryId = measurableHelper.createMeasurableCategory(mkName("mc"));
+        long m1Id = measurableHelper.createMeasurable(mkName("m1"), categoryId);
 
         EntityReference appRef = mkNewAppRef();
         mkRatings(appRef, m1Id);
@@ -120,9 +111,9 @@ public class MeasurableRatingDaoTest extends BaseInMemoryIntegrationTest {
 
     @Test
     public void multipleRatingsCanBeSaved() {
-        long categoryId = measurableHelper.createMeasurableCategory("mc");
-        long m1Id = measurableHelper.createMeasurable("m1", categoryId);
-        long m2Id = measurableHelper.createMeasurable("m2", categoryId);
+        long categoryId = measurableHelper.createMeasurableCategory(mkName("mc"));
+        long m1Id = measurableHelper.createMeasurable(mkName("m1"), categoryId);
+        long m2Id = measurableHelper.createMeasurable(mkName("m2"), categoryId);
 
         EntityReference app1Ref = mkNewAppRef();
         mkRatings(app1Ref, m1Id, m2Id);
@@ -138,14 +129,14 @@ public class MeasurableRatingDaoTest extends BaseInMemoryIntegrationTest {
     @Test
     public void multipleRatingsCanRetrievedBySelectors() {
 
-        long categoryId = measurableHelper.createMeasurableCategory("mc");
-        long m1Id = measurableHelper.createMeasurable("m1", categoryId);
-        long m2Id = measurableHelper.createMeasurable("m2", categoryId);
+        long categoryId = measurableHelper.createMeasurableCategory(mkName("mc"));
+        long m1Id = measurableHelper.createMeasurable(mkName("m1"), categoryId);
+        long m2Id = measurableHelper.createMeasurable(mkName("m2"), categoryId);
 
-        EntityReference app1Ref = appHelper.createNewApp("a1", null);
+        EntityReference app1Ref = appHelper.createNewApp(mkName("a1"), null);
         mkRatings(app1Ref, m1Id, m2Id);
 
-        EntityReference app2Ref = appHelper.createNewApp("a2", null);
+        EntityReference app2Ref = appHelper.createNewApp(mkName("a2"), null);
         mkRatings(app2Ref, m1Id);
 
         rebuildHierarchy(EntityKind.MEASURABLE);
@@ -178,11 +169,11 @@ public class MeasurableRatingDaoTest extends BaseInMemoryIntegrationTest {
 
     @Test
     public void ratingsCanBeBulkRemovedByCategoryForAGivenApp() {
-        long categoryId = measurableHelper.createMeasurableCategory("mc");
-        long m1Id = measurableHelper.createMeasurable("m1", categoryId);
-        long m2Id = measurableHelper.createMeasurable("m2", categoryId);
+        long categoryId = measurableHelper.createMeasurableCategory(mkName("mc"));
+        long m1Id = measurableHelper.createMeasurable(mkName("m1"), categoryId);
+        long m2Id = measurableHelper.createMeasurable(mkName("m2"), categoryId);
 
-        EntityReference app1Ref = appHelper.createNewApp("a1", null);
+        EntityReference app1Ref = appHelper.createNewApp(mkName("a1"), null);
         mkRatings(app1Ref, m1Id, m2Id);
 
         assertEquals(
@@ -207,6 +198,7 @@ public class MeasurableRatingDaoTest extends BaseInMemoryIntegrationTest {
                     .provenance(PROVENANCE)
                     .lastUpdate(UserTimestamp.mkForUser(LAST_UPDATE_USER))
                     .description("test")
+                    .isPrimary(false)
                     .build(), false);
         }
     }

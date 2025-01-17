@@ -1,25 +1,20 @@
 package org.finos.waltz.integration_test.inmem.story;
 
+import org.finos.waltz.common.exception.InsufficientPrivelegeException;
 import org.finos.waltz.integration_test.inmem.BaseInMemoryIntegrationTest;
-import org.finos.waltz.integration_test.inmem.helpers.AppHelper;
-import org.finos.waltz.integration_test.inmem.helpers.ChangeLogHelper;
-import org.finos.waltz.integration_test.inmem.helpers.NameHelper;
-import org.finos.waltz.integration_test.inmem.helpers.RatingSchemeHelper;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.EntityReference;
 import org.finos.waltz.model.Operation;
 import org.finos.waltz.model.assessment_definition.AssessmentDefinition;
 import org.finos.waltz.model.assessment_definition.AssessmentVisibility;
 import org.finos.waltz.model.assessment_definition.ImmutableAssessmentDefinition;
-import org.finos.waltz.model.assessment_rating.AssessmentRating;
-import org.finos.waltz.model.assessment_rating.ImmutableRemoveAssessmentRatingCommand;
-import org.finos.waltz.model.assessment_rating.ImmutableSaveAssessmentRatingCommand;
-import org.finos.waltz.model.assessment_rating.SaveAssessmentRatingCommand;
+import org.finos.waltz.model.assessment_rating.*;
 import org.finos.waltz.model.rating.ImmutableRatingSchemeItem;
 import org.finos.waltz.service.assessment_definition.AssessmentDefinitionService;
 import org.finos.waltz.service.assessment_rating.AssessmentRatingService;
 import org.finos.waltz.service.rating_scheme.RatingSchemeService;
-import org.junit.Test;
+import org.finos.waltz.test_common.helpers.*;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Collection;
@@ -27,12 +22,18 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.finos.waltz.common.CollectionUtilities.find;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class AssessmentsTest extends BaseInMemoryIntegrationTest {
 
     @Autowired
     private AppHelper appHelper;
+
+    @Autowired
+    private UserHelper userHelper;
+
+    @Autowired
+    private PersonHelper personHelper;
 
     @Autowired
     private AssessmentDefinitionService definitionService;
@@ -50,10 +51,16 @@ public class AssessmentsTest extends BaseInMemoryIntegrationTest {
     private ChangeLogHelper changeLogHelper;
 
     @Test
-    public void createUpdateAndRemoveSingleRating() {
-        String user = NameHelper.mkUserId("user");
+    public void createUpdateAndRemoveSingleRating() throws InsufficientPrivelegeException {
+        String adminUser = NameHelper.mkUserId("adminUser");
+        String userWithPerms = NameHelper.mkUserId("userWithPerms");
+        String userWithoutPerms = NameHelper.mkUserId("userWithoutPerms");
         String name = NameHelper.mkName("testAssessment");
         String role = NameHelper.mkName("testRole");
+
+        personHelper.createPerson(userWithPerms);
+        personHelper.createPerson(userWithoutPerms);
+
         SchemeDetail schemeDetail = createScheme();
 
         AssessmentDefinition def = ImmutableAssessmentDefinition.builder()
@@ -62,7 +69,7 @@ public class AssessmentsTest extends BaseInMemoryIntegrationTest {
                 .isReadOnly(false)
                 .permittedRole(role)
                 .entityKind(EntityKind.APPLICATION)
-                .lastUpdatedBy(user)
+                .lastUpdatedBy(adminUser)
                 .visibility(AssessmentVisibility.SECONDARY)
                 .ratingSchemeId(schemeDetail.id)
                 .build();
@@ -92,29 +99,41 @@ public class AssessmentsTest extends BaseInMemoryIntegrationTest {
         EntityReference app1 = appHelper.createNewApp(NameHelper.mkName("app1"), ouIds.a);
         EntityReference app2 = appHelper.createNewApp(NameHelper.mkName("app2"), ouIds.b);
 
-        SaveAssessmentRatingCommand cmd = ImmutableSaveAssessmentRatingCommand.builder()
+        SaveAssessmentRatingCommand cmd = ImmutableSaveAssessmentRatingCommand
+                .builder()
                 .assessmentDefinitionId(defId)
                 .entityReference(app1)
                 .ratingId(schemeDetail.y)
-                .lastUpdatedBy(user)
+                .lastUpdatedBy(userWithPerms)
                 .build();
 
-        ratingService.store(cmd, user);
+        try {
+            ratingService.store(cmd, userWithoutPerms);
+            fail("should have thrown an exception as user cannot update assessment");
+        } catch (InsufficientPrivelegeException ipe) {
+            // pass
+        }
+
+        userHelper.createUserWithRoles(userWithPerms, role);
+        ratingService.store(cmd, userWithPerms);
 
         changeLogHelper.assertChangeLogContainsAtLeastOneMatchingOperation(
                 app1,
                 Operation.ADD);
 
-        assertNotNull(find(
+        Optional<AssessmentRating> ratingCreated = find(
                 r -> r.assessmentDefinitionId() == defId && r.ratingId() == schemeDetail.y,
-                ratingService.findForEntity(app1)));
+                ratingService.findForEntity(app1));
+
+        assertTrue(ratingCreated.isPresent());
         assertTrue(ratingService.findForEntity(app2).isEmpty());
 
-        ratingService.store(
-                ImmutableSaveAssessmentRatingCommand
-                    .copyOf(cmd)
-                    .withRatingId(schemeDetail.n),
-                user);
+        ratingService.updateRating(
+                ratingCreated.get().id().get(),
+                ImmutableUpdateRatingCommand.builder()
+                        .newRatingId(schemeDetail.n)
+                        .build(),
+                userWithPerms);
 
         changeLogHelper.assertChangeLogContainsAtLeastOneMatchingOperation(
                 app1,
@@ -136,9 +155,10 @@ public class AssessmentsTest extends BaseInMemoryIntegrationTest {
                 ImmutableRemoveAssessmentRatingCommand.builder()
                         .assessmentDefinitionId(defId)
                         .entityReference(app1)
-                        .lastUpdatedBy(user)
+                        .ratingId(schemeDetail.n)
+                        .lastUpdatedBy(userWithPerms)
                     .build(),
-                user);
+                userWithPerms);
 
         changeLogHelper.assertChangeLogContainsAtLeastOneMatchingOperation(
                 app1,
@@ -169,7 +189,7 @@ public class AssessmentsTest extends BaseInMemoryIntegrationTest {
                         .ratingSchemeId(schemeId)
                         .position(10)
                         .color("green")
-                        .rating('Y')
+                        .rating("Y")
                         .build());
 
         Long n = schemeService.saveRatingItem(
@@ -180,7 +200,7 @@ public class AssessmentsTest extends BaseInMemoryIntegrationTest {
                         .ratingSchemeId(schemeId)
                         .position(20)
                         .color("red")
-                        .rating('N')
+                        .rating("N")
                         .build());
 
         Long m = schemeService.saveRatingItem(
@@ -191,7 +211,7 @@ public class AssessmentsTest extends BaseInMemoryIntegrationTest {
                         .ratingSchemeId(schemeId)
                         .position(30)
                         .color("yellow")
-                        .rating('M')
+                        .rating("M")
                         .userSelectable(false)
                         .build());
 

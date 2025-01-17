@@ -33,7 +33,8 @@ const bindings = {
     allocations: "<",
     onSave: "<",
     onDismiss: "<",
-    filters: "<"
+    filters: "<",
+    canEdit: "<"
 };
 
 
@@ -43,18 +44,9 @@ const initialState = {
     saveEnabled: false,
     scheme: null,
     showingHelp: false,
-    unallocated: []
+    unallocated: [],
+    canEdit: false
 };
-
-
-function findMeasurablesRelatedToScheme(ratings = [], measurablesById = {}, scheme) {
-    return _
-        .chain(ratings)
-        .map(r => measurablesById[r.measurableId])
-        .compact()
-        .filter(m => m.categoryId === scheme.measurableCategoryId)
-        .value();
-}
 
 
 function controller($q, serviceBroker) {
@@ -71,24 +63,29 @@ function controller($q, serviceBroker) {
             .loadViewData(
                 CORE_API.MeasurableRatingStore.findForEntityReference,
                 [vm.entityReference])
-            .then(r => r.data);
+            .then(r => r.data || []);
 
         return $q
             .all([measurablePromise, ratingsPromise])
             .then(([allMeasurables, ratings]) => {
+
                 const measurablesById = _.keyBy(allMeasurables, "id");
-                const ratingsByMeasurableId = _.keyBy(ratings, "measurableId");
-                const availableMeasurables = findMeasurablesRelatedToScheme(ratings, measurablesById, vm.scheme);
-                const allocationsByMeasurableId = _
+
+                const allocationsByMeasurableRatingId = _
                     .chain(vm.allocations)
                     .filter(a => a.schemeId === vm.scheme.id)
-                    .keyBy(a => a.measurableId)
+                    .keyBy(a => a.measurableRatingId)
                     .value();
 
                 items = _
-                    .chain(availableMeasurables)
-                    .map(measurable => {
-                        const allocation = allocationsByMeasurableId[measurable.id];
+                    .chain(ratings)
+                    .filter(r => {
+                        const measurable = measurablesById[r.measurableId];
+                        return measurable?.categoryId === vm.scheme.measurableCategoryId
+                    })
+                    .map(measurableRating => {
+                        const measurable = measurablesById[measurableRating.measurableId];
+                        const allocation = allocationsByMeasurableRatingId[measurableRating.id];
                         const working = {
                             isAllocated: !_.isNil(allocation),
                             dirty: false,
@@ -98,7 +95,7 @@ function controller($q, serviceBroker) {
                             allocation,
                             measurable,
                             working,
-                            rating: ratingsByMeasurableId[measurable.id]
+                            rating: measurableRating
                         };
                     })
                     .value();
@@ -227,7 +224,7 @@ function controller($q, serviceBroker) {
             .map(d => ({
                 operation: determineChangeType(d),
                 measurablePercentage: {
-                    measurableId: d.measurable.id,
+                    measurableRatingId: d.rating.id,
                     percentage: d.working.percentage
                 },
                 previousPercentage: d.allocation == null ? undefined : d.allocation.percentage

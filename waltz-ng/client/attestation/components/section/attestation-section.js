@@ -24,6 +24,7 @@ import {attest} from "../../attestation-utils";
 import {displayError} from "../../../common/error-utils";
 import toasts from "../../../svelte-stores/toast-store";
 import MeasurableAttestationPanel from "../../components/svelte/MeasurableAttestationPanel.svelte"
+import {operation} from "../../../common/services/enums/operation";
 
 const bindings = {
     parentEntityRef: "<"
@@ -85,6 +86,7 @@ function mkAttestationSections(baseSections = [], attestations = [], unattestedC
 
 
 function controller($q,
+                    $scope,
                     serviceBroker) {
 
     const vm = initialiseData(this, initialState);
@@ -131,9 +133,9 @@ function controller($q,
 
         const permissionGroupPromise = serviceBroker
             .loadViewData(
-                CORE_API.PermissionGroupStore.findByEntity,
+                CORE_API.PermissionGroupStore.findForParentEntityRef,
                 [entityReference])
-            .then(r => r.data);
+            .then(r => _.filter(r.data, d => d.operation === operation.ATTEST.key));
 
         return $q
             .all([runsPromise, instancesPromise, unattestedChangesPromise, permissionGroupPromise])
@@ -154,9 +156,16 @@ function controller($q,
 
 
     vm.attestEntity = () => {
-        const msg = "By clicking 'OK', you are attesting that all data flows are present, correct and accurately reflected for this entity, and thereby accountable for this validation.";
+        const msg = "By clicking 'OK', you are attesting that all mappings are present, correct and accurately reflected for this entity, and thereby accountable for this validation.";
         if (confirm(msg)){
-            return attest(serviceBroker, vm.parentEntityRef, vm.activeAttestationSection.type)
+            // an attested entity id will not be present in all cases.
+            // It's main use is for thing like measurable categories
+            const maybeAttestedEntityId = _.get(vm, ["activeAttestationSection", "attestedEntityRef", "id"]);
+            return attest(
+                    serviceBroker,
+                    vm.parentEntityRef,
+                    vm.activeAttestationSection.type,
+                    maybeAttestedEntityId)
                 .then(() => {
                     toasts.success("Attested successfully");
                     loadAttestationData(vm.parentEntityRef);
@@ -176,7 +185,7 @@ function controller($q,
     vm.hasPermissionToAttest = (entityKind) => {
         return _.isEmpty(vm.permissions)
             ? false
-            : _.some(vm.permissions, p => p.qualifierKind === entityKind);
+            : _.some(vm.permissions, p => p.subjectKind === entityKind);
     };
 
     vm.onCancelAttestation = () => {
@@ -202,11 +211,26 @@ function controller($q,
         }
     };
 
+    vm.onMeasurableAttestationInitiated = (category) => {
+        $scope.$applyAsync(() => {
+            vm.mode = modes.EDIT;
+            vm.activeAttestationSection = {
+                type: "MEASURABLE_CATEGORY",
+                name: category.name,
+                actionLabel:  `Attest '${category.name}' ratings`,
+                typeName: category.name,
+                unattestedChanges: [],
+                attestedEntityRef: category
+            };
+        });
+    };
+
 }
 
 
 controller.$inject = [
     "$q",
+    "$scope",
     "ServiceBroker"
 ];
 

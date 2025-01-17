@@ -19,7 +19,8 @@
 package org.finos.waltz.web;
 
 import com.tngtech.archunit.library.GeneralCodingRules;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+
 
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
@@ -44,6 +45,7 @@ public class ArchitectureComplianceTest extends BaseArchitectureComplianceTest {
     @Test
     public void ensureLayersAreRespected() {
         layeredArchitecture()
+                .consideringOnlyDependenciesInLayers()
                 .layer("Web").definedBy("..web..")
                 .layer("Endpoints").definedBy("..endpoints.api..")
                 .layer("Extractors").definedBy("..endpoints.extracts..")

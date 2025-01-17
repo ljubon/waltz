@@ -26,7 +26,8 @@ import org.finos.waltz.model.command.Command;
 import org.immutables.value.Value;
 
 import java.time.LocalDate;
-import java.util.Optional;
+
+import static org.finos.waltz.common.DateTimeUtilities.today;
 
 @Value.Immutable
 @JsonSerialize(as = ImmutableSurveyInstanceCreateCommand.class)
@@ -34,9 +35,18 @@ import java.util.Optional;
 public abstract class SurveyInstanceCreateCommand implements Command {
 
     public abstract Long surveyRunId();
+
     public abstract EntityReference entityReference();
-    public abstract Optional<LocalDate> dueDate();
+
+    public abstract LocalDate dueDate();
+
     public abstract LocalDate approvalDueDate();
+
+    @Value.Default
+    public String name() {
+        return "";
+    }
+
 
     @Value.Default
     public SurveyInstanceStatus status() {
@@ -45,5 +55,11 @@ public abstract class SurveyInstanceCreateCommand implements Command {
 
     @Nullable
     public abstract String owningRole();
+
+    @Value.Default
+    public LocalDate issuedOn() {
+        return today();
+    }
+
 
 }

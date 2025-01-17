@@ -18,21 +18,25 @@
 
 package org.finos.waltz.service.taxonomy_management;
 
-import org.finos.waltz.service.client_cache_key.ClientCacheKeyService;
-import org.finos.waltz.service.entity_hierarchy.EntityHierarchyService;
-import org.finos.waltz.service.measurable.MeasurableService;
-import org.finos.waltz.service.measurable_category.MeasurableCategoryService;
-import org.finos.waltz.service.user.UserRoleService;
 import org.finos.waltz.common.DateTimeUtilities;
 import org.finos.waltz.common.StringUtilities;
 import org.finos.waltz.data.taxonomy_management.TaxonomyChangeDao;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.EntityReference;
-import org.finos.waltz.model.exceptions.NotAuthorizedException;
 import org.finos.waltz.model.measurable.Measurable;
-import org.finos.waltz.model.measurable_category.MeasurableCategory;
-import org.finos.waltz.model.taxonomy_management.*;
-import org.finos.waltz.model.user.SystemRole;
+import org.finos.waltz.model.taxonomy_management.ImmutableTaxonomyChangeCommand;
+import org.finos.waltz.model.taxonomy_management.ImmutableTaxonomyChangePreview;
+import org.finos.waltz.model.taxonomy_management.TaxonomyChangeCommand;
+import org.finos.waltz.model.taxonomy_management.TaxonomyChangeLifecycleStatus;
+import org.finos.waltz.model.taxonomy_management.TaxonomyChangePreview;
+import org.finos.waltz.model.taxonomy_management.TaxonomyChangeType;
+import org.finos.waltz.service.client_cache_key.ClientCacheKeyService;
+import org.finos.waltz.service.entity_hierarchy.EntityHierarchyService;
+import org.finos.waltz.service.measurable.MeasurableService;
+import org.finos.waltz.service.measurable_category.MeasurableCategoryService;
+import org.finos.waltz.service.user.UserRoleService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -41,11 +45,16 @@ import java.util.List;
 import java.util.Map;
 
 import static java.util.stream.Collectors.toMap;
-import static org.finos.waltz.common.Checks.*;
+import static org.finos.waltz.common.Checks.checkFalse;
+import static org.finos.waltz.common.Checks.checkNotNull;
+import static org.finos.waltz.common.Checks.checkTrue;
+import static org.finos.waltz.service.taxonomy_management.TaxonomyManagementUtilities.verifyUserHasPermissions;
 import static org.jooq.lambda.tuple.Tuple.tuple;
 
 @Service
 public class TaxonomyChangeService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(TaxonomyChangeService.class);
 
     private final TaxonomyChangeDao taxonomyChangeDao;
     private final Map<TaxonomyChangeType, TaxonomyCommandProcessor> processorsByType;
@@ -89,12 +98,21 @@ public class TaxonomyChangeService {
 
     public TaxonomyChangePreview previewById(long id) {
         TaxonomyChangeCommand command = taxonomyChangeDao.getDraftCommandById(id);
-        return preview(command);
+        try {
+            return preview(command);
+        } catch (Exception e) {
+            return ImmutableTaxonomyChangePreview
+                    .builder()
+                    .command(command)
+                    .errorMessage(e.getMessage())
+                    .build();
+        }
     }
 
 
-    public TaxonomyChangeCommand submitDraftChange(TaxonomyChangeCommand draftCommand, String userId) {
-        verifyUserHasPermissions(userId, draftCommand.changeDomain());
+    public TaxonomyChangeCommand submitDraftChange(TaxonomyChangeCommand draftCommand,
+                                                   String userId) {
+        verifyUserHasPermissions(measurableCategoryService, userRoleService, userId, draftCommand.changeDomain());
         checkTrue(draftCommand.status() == TaxonomyChangeLifecycleStatus.DRAFT, "Command must be DRAFT");
 
         TaxonomyChangeCommand commandToSave = ImmutableTaxonomyChangeCommand
@@ -115,9 +133,16 @@ public class TaxonomyChangeService {
     }
 
 
-    public TaxonomyChangeCommand applyById(long id, String userId) {
+    public Collection<TaxonomyChangeCommand> findAllChangesByDomain(EntityReference domain) {
+        return taxonomyChangeDao
+                .findChangesByDomain(domain);
+    }
+
+
+    public TaxonomyChangeCommand applyById(long id,
+                                           String userId) {
         TaxonomyChangeCommand command = taxonomyChangeDao.getDraftCommandById(id);
-        verifyUserHasPermissions(userId, command.changeDomain());
+        verifyUserHasPermissions(measurableCategoryService, userRoleService, userId, command.changeDomain());
 
         checkFalse(isMoveToSameParent(command),
                 "Measurable cannot set it self as its parent.");
@@ -133,15 +158,21 @@ public class TaxonomyChangeService {
         // rebuild measurable hierarchy
         if (command.changeDomain().kind() == EntityKind.MEASURABLE_CATEGORY
                 && isHierarchyChange(command)) {
-            entityHierarchyService.buildForMeasurableByCategory(command.changeDomain().id());
+            long categoryId = command.changeDomain().id();
+            int insertCount = entityHierarchyService.buildForMeasurableByCategory(categoryId);
+            LOG.info(
+                    "Rebuilt measurable category: {},  inserted {} new records",
+                    categoryId,
+                    insertCount);
         }
 
         return updatedCommand;
     }
 
 
-    public boolean removeById(long id, String userId) {
-        verifyUserHasPermissions(userId);
+    public boolean removeById(long id,
+                              String userId) {
+        verifyUserHasPermissions(userRoleService, userId);
         return taxonomyChangeDao.removeById(id, userId);
     }
 
@@ -153,26 +184,9 @@ public class TaxonomyChangeService {
     }
 
 
-    private void verifyUserHasPermissions(String userId, EntityReference changeDomain) {
-        verifyUserHasPermissions(userId);
-
-        if (changeDomain.kind() == EntityKind.MEASURABLE_CATEGORY) {
-            MeasurableCategory category = measurableCategoryService.getById(changeDomain.id());
-            if (! category.editable()) {
-                throw new NotAuthorizedException("Unauthorised: Category is not editable");
-            }
-        }
-    }
-
-    private void verifyUserHasPermissions(String userId) {
-        if (! userRoleService.hasRole(userId, SystemRole.TAXONOMY_EDITOR.name())) {
-            throw new NotAuthorizedException();
-        }
-    }
-
     private boolean isMoveToSameParent(TaxonomyChangeCommand command) {
         String destinationId = command.params().get("destinationId");
-        if(isMovingToANode(command, destinationId)) {
+        if (isMovingToANode(command, destinationId)) {
 
             long parentId = Long.parseLong(destinationId);
             final Measurable parent = measurableService.getById(parentId);
@@ -186,10 +200,12 @@ public class TaxonomyChangeService {
     private boolean isMoveToANodeWhichIsAlreadyAChild(TaxonomyChangeCommand command) {
         String destinationId = command.params().get("destinationId");
         return isMovingToANode(command, destinationId) &&
-             Long.parseLong(destinationId) == command.primaryReference().id();
+                Long.parseLong(destinationId) == command.primaryReference().id();
     }
 
-    private boolean isMovingToANode(TaxonomyChangeCommand command, String destinationId) {
+
+    private boolean isMovingToANode(TaxonomyChangeCommand command,
+                                    String destinationId) {
         return command.changeType().equals(TaxonomyChangeType.MOVE) &&
                 StringUtilities.notEmpty(destinationId);
     }
@@ -201,4 +217,5 @@ public class TaxonomyChangeService {
                 || command.changeType() == TaxonomyChangeType.REMOVE
                 || command.changeType() == TaxonomyChangeType.MOVE;
     }
+
 }

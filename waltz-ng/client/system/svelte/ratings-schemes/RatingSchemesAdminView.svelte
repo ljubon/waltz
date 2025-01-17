@@ -6,11 +6,13 @@
     import SchemeEditor from "./SchemeEditor.svelte";
     import ItemsView from "./ItemsView.svelte";
     import Icon from "../../../common/svelte/Icon.svelte";
+    import toasts from "../../../svelte-stores/toast-store"
 
     import {ratingSchemeStore} from "../../../svelte-stores/rating-schemes";
     import {termSearch} from "../../../common";
     import {countUsageStatsBy, sortItems} from "./rating-scheme-utils";
     import SchemeRemovalConfirmation from "./SchemeRemovalConfirmation.svelte";
+    import _ from "lodash";
 
 
     const Modes = {
@@ -20,13 +22,14 @@
         DELETE: "delete"
     };
 
-    const loadSchemeCall = ratingSchemeStore.loadAll();
-    const usageCall = ratingSchemeStore.calcRatingUsageStats();
+    const loadSchemeCall = ratingSchemeStore.loadAll(true);
+    const usageCall = ratingSchemeStore.calcRatingUsageStats(true);
 
     $: usageCountsBySchemeId = countUsageStatsBy($usageCall.data, d => d.schemeId);
 
     let qry;
     let activeMode = Modes.LIST;
+    let activeSchemeId = null;
     let activeScheme = null;
 
     $: ratingSchemes = _
@@ -35,13 +38,13 @@
         .value();
 
 
-    $: activeScheme = activeScheme
-        ? _.find(ratingSchemes, ({id: activeScheme.id}))
+    $: activeScheme = activeSchemeId
+        ? _.find(ratingSchemes, ({id: activeSchemeId}))
         : null;
 
 
     function onEditScheme(scheme) {
-        activeScheme = scheme;
+        activeSchemeId = scheme.id;
         activeMode = Modes.EDIT_SCHEME;
     }
 
@@ -52,42 +55,62 @@
 
 
     function doSaveScheme(scheme) {
-        return ratingSchemeStore
-            .save(scheme)
+        const savePromise = ratingSchemeStore
+            .save(scheme);
+
+        return Promise
+            .resolve(savePromise)
             .then(() => {
                 activeScheme = null;
                 activeMode = Modes.LIST;
                 ratingSchemeStore.loadAll(true);
-            });
+                toasts.success("Successfully saved rating scheme")
+            })
+            .catch(e => toasts.error("Unable to save rating scheme. " + e.error));
     }
 
 
     function doSaveItem(item) {
-        return ratingSchemeStore
-            .saveItem(item)
+        const saveItemPromise = ratingSchemeStore
+            .saveItem(item);
+
+        return Promise
+            .resolve(saveItemPromise)
             .then(() => {
                 ratingSchemeStore.loadAll(true);
-            });
+                toasts.success("Successfully saved rating scheme item")
+            })
+            .catch(e => toasts.error("Unable to save rating scheme item. " + e.error));
     }
 
 
     function doRemoveItem(itemId) {
-        return ratingSchemeStore
-            .removeItem(itemId)
+        const removeItemPromise = ratingSchemeStore
+            .removeItem(itemId);
+
+        return Promise
+            .resolve(removeItemPromise)
             .then(() => {
                 ratingSchemeStore.loadAll(true);
-            });
+                toasts.success("Successfully removed rating scheme item")
+            })
+            .catch(e => toasts.error("Unable to remove rating scheme item. " + e.error));
     }
 
 
     function doRemoveScheme(schemeId) {
-        return ratingSchemeStore
-            .removeScheme(schemeId)
+        const removePromise = ratingSchemeStore
+            .removeScheme(schemeId);
+
+        return Promise
+            .resolve(removePromise)
             .then(() => {
                 activeScheme = null;
                 activeMode = Modes.LIST;
                 ratingSchemeStore.loadAll(true);
-            });
+                toasts.success("Successfully removed rating scheme")
+            })
+            .catch(e => toasts.error("Unable to remove rating scheme. " + e.error));
     }
 
 
@@ -146,7 +169,7 @@
                                    doCancel={onCancel}
                                    doRemove={doRemoveScheme}/>
 
-    {:else if activeMode === Modes.EDIT_RATINGS}
+    {:else if activeMode === Modes.EDIT_RATINGS && !_.isNil(activeScheme) }
 
         <ItemsView scheme={activeScheme}
                    ratings={sortItems(activeScheme.ratings)}

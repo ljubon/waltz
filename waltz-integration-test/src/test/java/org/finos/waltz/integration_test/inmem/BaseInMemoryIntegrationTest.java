@@ -11,12 +11,11 @@ import org.finos.waltz.schema.tables.records.OrganisationalUnitRecord;
 import org.finos.waltz.service.entity_hierarchy.EntityHierarchyService;
 import org.h2.tools.Server;
 import org.jooq.DSLContext;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.context.support.AnnotationConfigContextLoader;
 
 import java.sql.SQLException;
@@ -26,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.finos.waltz.model.EntityReference.mkRef;
 import static org.finos.waltz.schema.Tables.ORGANISATIONAL_UNIT;
 
-@RunWith(SpringJUnit4ClassRunner.class)
+@ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = DIInMemoryTestConfiguration.class, loader = AnnotationConfigContextLoader.class)
 public abstract class BaseInMemoryIntegrationTest {
 
@@ -73,14 +72,14 @@ public abstract class BaseInMemoryIntegrationTest {
         return ids;
     }
 
-    @Before
+    @BeforeEach
     public void baseSetup() {
         LoggingUtilities.configureLogging();
         ouIds = setupOuTree();
     }
 
 
-    private DSLContext getDsl() {
+    protected DSLContext getDsl() {
         return ctx.getBean(DSLContext.class);
     }
 
@@ -115,19 +114,19 @@ public abstract class BaseInMemoryIntegrationTest {
 
     /**
      * DEBUG ONLY
-     *
-     * Uncomment the @After annotation to get the test executor
+     * <p>
+     * Uncomment the @AfterAll annotation to get the test executor
      * to pause for 2 hours.  During this time you can
      * attach an external database client to the in memory H2
      * instance to see the current state of the database.
-     *
+     * <p>
      * The url to connect to is:
-     *    jdbc:h2:tcp://localhost/mem:waltz
-     *    username: sa
-     *    password: sa
+     * jdbc:h2:tcp://localhost/mem:waltz
+     * username: sa
+     * password: sa
      */
-//    @After
-    public void stickAround() {
+//    @AfterAll
+    public static void stickAround() {
         try {
             System.err.println("Starting tcp server, connect with: jdbc:h2:tcp://localhost/mem:waltz, username: sa, password: sa");
             Server.createTcpServer().start();

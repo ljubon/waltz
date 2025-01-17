@@ -18,14 +18,24 @@
 
 package org.finos.waltz.data.cost;
 
-import org.finos.waltz.schema.tables.records.CostRecord;
 import org.finos.waltz.data.GenericSelector;
 import org.finos.waltz.data.InlineSelectFieldFactory;
 import org.finos.waltz.model.EntityKind;
 import org.finos.waltz.model.EntityReference;
 import org.finos.waltz.model.cost.EntityCost;
 import org.finos.waltz.model.cost.ImmutableEntityCost;
-import org.jooq.*;
+import org.finos.waltz.schema.tables.records.CostRecord;
+import org.jooq.CommonTableExpression;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Record;
+import org.jooq.Record1;
+import org.jooq.Record2;
+import org.jooq.RecordMapper;
+import org.jooq.SelectConditionStep;
+import org.jooq.SelectOnConditionStep;
+import org.jooq.SelectSeekStep1;
 import org.jooq.impl.DSL;
 import org.jooq.lambda.tuple.Tuple2;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,11 +46,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.finos.waltz.schema.Tables.COST;
 import static org.finos.waltz.common.DateTimeUtilities.toLocalDateTime;
 import static org.finos.waltz.common.ListUtilities.newArrayList;
 import static org.finos.waltz.data.JooqUtilities.selectorToCTE;
 import static org.finos.waltz.model.EntityReference.mkRef;
+import static org.finos.waltz.schema.Tables.COST;
 import static org.jooq.lambda.tuple.Tuple.tuple;
 
 
@@ -88,39 +98,28 @@ public class CostDao {
     }
 
 
-    public Set<EntityCost> findBySelector(GenericSelector genericSelector){
-
-        SelectHavingStep<Record2<Long, Integer>> latestYearForCostKindSelector = DSL
-                .select(COST.COST_KIND_ID, DSL.max(COST.YEAR).as("latest_year"))
-                .from(COST)
-                .where(COST.ENTITY_ID.in(genericSelector.selector())
-                        .and(COST.ENTITY_KIND.eq(genericSelector.kind().name())))
-                .groupBy(COST.COST_KIND_ID);
-
-        Condition latestYearForCostKind = COST.COST_KIND_ID.eq(latestYearForCostKindSelector.field(COST.COST_KIND_ID))
-                .and(COST.YEAR.eq(latestYearForCostKindSelector.field("latest_year", Integer.class)));
-
+    public Set<EntityCost> findBySelector(GenericSelector genericSelector,
+                                          int year){
         return dsl
                 .select(ENTITY_NAME_FIELD)
                 .select(COST.fields())
                 .from(COST)
-                .innerJoin(latestYearForCostKindSelector).on(dsl.renderInlined(latestYearForCostKind))
                 .where(COST.ENTITY_ID.in(genericSelector.selector())
                         .and(COST.ENTITY_KIND.eq(genericSelector.kind().name())))
+                .and(COST.YEAR.eq(year))
                 .fetchSet(TO_COST_MAPPER);
     }
 
 
     public Set<EntityCost> findTopCostsForCostKindAndSelector(long costKindId,
+                                                              int year,
                                                               GenericSelector genericSelector,
                                                               int limit){
-
-        SelectConditionStep<Record1<Integer>> latestYear = mkLatestYearSelector(costKindId, genericSelector);
 
         Condition cond = COST.ENTITY_ID.in(genericSelector.selector())
                 .and(COST.ENTITY_KIND.eq(genericSelector.kind().name()))
                 .and(COST.COST_KIND_ID.eq(costKindId))
-                .and(COST.YEAR.eq(latestYear));
+                .and(COST.YEAR.eq(year));
 
         SelectSeekStep1<Record, BigDecimal> qry = dsl
                 .select(ENTITY_NAME_FIELD)
@@ -201,19 +200,6 @@ public class CostDao {
                 .fetchOne(r -> tuple(
                         r.get(appsWithCostsCount),
                         r.get(appCount) - r.get(appsWithCostsCount)));
-    }
-
-
-    // -- HELPERS -------------
-
-    private SelectConditionStep<Record1<Integer>> mkLatestYearSelector(long costKindId,
-                                                                       GenericSelector genericSelector) {
-        return DSL
-                .select(DSL.max(COST.YEAR).as("latest_year"))
-                .from(COST)
-                .where(COST.COST_KIND_ID.eq(costKindId))
-                .and(COST.ENTITY_ID.in(genericSelector.selector())
-                        .and(COST.ENTITY_KIND.eq(genericSelector.kind().name())));
     }
 
 }

@@ -33,8 +33,13 @@ const ratingCellTemplate = `
 
 
 const initialState = {
+    allowBulkEditing: false,
     columnDefs: [
         mkEntityLinkGridCell("Entity", "entityRef", "none", "right"),
+        {
+            field: "entityRef.externalId",
+            name: "External Identifier"
+        },
         {
             field: "rating",
             width: "30%",
@@ -53,6 +58,7 @@ function controller($q,
 
     const definitionId = $stateParams.id;
     const vm = initialiseData(this, initialState);
+    const bulkEditableKinds = ["ACTOR", "APPLICATION", "CHANGE_INITIATIVE", "CHANGE_UNIT", "LEGAL_ENTITY", "LICENCE", "MEASURABLE"];
 
     userService
         .whoami()
@@ -61,7 +67,10 @@ function controller($q,
     const loadAll = () => {
         serviceBroker
             .loadViewData(CORE_API.AssessmentDefinitionStore.getById, [definitionId])
-            .then(r => vm.definition = r.data);
+            .then(r => {
+                vm.definition = r.data;
+                vm.allowBulkEditing = _.includes(bulkEditableKinds, vm.definition.entityKind);
+            });
 
         const ratingSchemePromise = serviceBroker
             .loadViewData(CORE_API.RatingSchemeStore.findRatingsSchemeItems, [definitionId])
@@ -76,12 +85,14 @@ function controller($q,
             .then(([ratings, ratingSchemeItems]) => {
                 const itemsById = _.keyBy(ratingSchemeItems, "id");
                 vm.ratingSchemeItems = ratingSchemeItems;
-                vm.appRatings = _.map(ratings, r =>
-                    Object.assign(r, {
-                        entityRef: r.entityReference,
-                        rating: itemsById[r.ratingId],
-                        comment: r.comment
-                    }));
+                vm.appRatings = _.map(ratings, r => Object
+                    .assign(
+                        {},
+                        {
+                            entityRef: r.entityReference,
+                            rating: itemsById[r.ratingId],
+                            comment: r.comment
+                        }));
             });
     };
 

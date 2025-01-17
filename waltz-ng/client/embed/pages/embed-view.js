@@ -20,8 +20,13 @@ import _ from "lodash";
 import {initialiseData} from "../../common";
 import {dynamicSections} from "../../dynamic-section/dynamic-section-definitions";
 import template from "./embed-view.html";
+import Toasts from "../../notification/components/toaster/Toasts.svelte";
+import Popover from "../../common/svelte/popover/Popover.svelte";
 
-const initialState = {};
+const initialState = {
+    Popover,
+    Toasts
+};
 
 function controller($stateParams) {
     const vm = initialiseData(this, initialState);
@@ -33,7 +38,8 @@ function controller($stateParams) {
         };
 
         vm.section = _.find(dynamicSections, { id: $stateParams.sectionId });
-    }
+        document.title = `Waltz: ${vm.section.name}`;
+    };
 }
 
 

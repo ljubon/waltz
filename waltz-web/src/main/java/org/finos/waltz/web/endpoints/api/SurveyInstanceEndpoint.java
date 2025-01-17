@@ -19,17 +19,22 @@
 package org.finos.waltz.web.endpoints.api;
 
 
+import org.finos.waltz.model.attestation.SyncRecipientsResponse;
 import org.finos.waltz.model.person.Person;
 import org.finos.waltz.model.survey.*;
+import org.finos.waltz.model.user.SystemRole;
 import org.finos.waltz.service.survey.SurveyInstanceService;
 import org.finos.waltz.service.user.UserRoleService;
 import org.finos.waltz.web.DatumRoute;
 import org.finos.waltz.web.ListRoute;
 import org.finos.waltz.web.endpoints.Endpoint;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.Optional;
 
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.model.HierarchyQueryScope.EXACT;
@@ -40,7 +45,9 @@ import static org.finos.waltz.web.endpoints.EndpointUtilities.*;
 @Service
 public class SurveyInstanceEndpoint implements Endpoint {
 
+    private static final Logger LOG = LoggerFactory.getLogger(SurveyInstanceEndpoint.class);
     private static final String BASE_URL = mkPath("api", "survey-instance");
+
 
     private final SurveyInstanceService surveyInstanceService;
     private final UserRoleService userRoleService;
@@ -60,11 +67,16 @@ public class SurveyInstanceEndpoint implements Endpoint {
     public void register() {
         String getByIdPath = mkPath(BASE_URL, "id", ":id");
         String getPermissionsPath = mkPath(BASE_URL, ":id", "permissions");
+        String reassignRecipientsPath = mkPath(BASE_URL, "reassign-recipients");
+        String reassignRecipientsCountsPath = mkPath(BASE_URL, "reassign-recipients-counts");
+        String reassignOwnersPath = mkPath(BASE_URL, "reassign-owners");
+        String reassignOwnersCountsPath = mkPath(BASE_URL, "reassign-owners-counts");
         String findByEntityRefPath = mkPath(BASE_URL, "entity", ":kind", ":id");
         String findForRecipientIdPath = mkPath(BASE_URL, "recipient", "id", ":id");
         String findForSurveyRunPath = mkPath(BASE_URL, "run", ":id");
         String findPreviousVersionsPath = mkPath(BASE_URL, "id", ":id", "previous-versions");
         String findVersionsPath = mkPath(BASE_URL, "id", ":id", "versions");
+        String findGroupApproversPath = mkPath(BASE_URL, ":id", "group-approvers");
         String findRecipientsPath = mkPath(BASE_URL, ":id", "recipients");
         String findOwnersPath = mkPath(BASE_URL, ":id", "owners");
         String findResponsesPath = mkPath(BASE_URL, ":id", "responses");
@@ -79,6 +91,8 @@ public class SurveyInstanceEndpoint implements Endpoint {
         String deleteOwnerPath = mkPath(BASE_URL, ":id", "owner", ":personId");
         String reportProblemWithQuestionResponsePath = mkPath(BASE_URL, ":id", "response", ":questionId", "problem");
         String copyResponsesPath = mkPath(BASE_URL, ":id", "copy-responses");
+        String withdrawOpenSurveysForRunPath = mkPath(BASE_URL, "run", ":id", "withdraw-open");
+        String withdrawOpenSurveysForTemplatePath = mkPath(BASE_URL, "template", ":id", "withdraw-open");
 
         DatumRoute<SurveyInstance> getByIdRoute =
                 (req, res) -> surveyInstanceService.getById(getId(req));
@@ -101,8 +115,28 @@ public class SurveyInstanceEndpoint implements Endpoint {
         ListRoute<Person> findRecipientsRoute =
                 (req, res) -> surveyInstanceService.findRecipients(getId(req));
 
+        ListRoute<Person> findGroupApproversRoute =
+                (req, res) -> surveyInstanceService.findGroupApprovers(getId(req));
+
         ListRoute<Person> findOwnersRoute =
                 (req, res) -> surveyInstanceService.findOwners(getId(req));
+
+        DatumRoute<SyncRecipientsResponse> reassignRecipientsRoute = (req, res) -> {
+            requireRole(userRoleService, req, SystemRole.ADMIN);
+            LOG.info("User: {}, requested reassign recipients for surveys", getUsername(req));
+            return surveyInstanceService.reassignRecipients();
+        };
+
+        DatumRoute<SyncRecipientsResponse> reassignRecipientsCountsRoute = (req, res) -> surveyInstanceService.getReassignRecipientsCounts();
+
+
+        DatumRoute<SyncRecipientsResponse> reassignOwnersRoute = (req, res) -> {
+            requireRole(userRoleService, req, SystemRole.ADMIN);
+            LOG.info("User: {}, requested reassign owners for surveys", getUsername(req));
+            return surveyInstanceService.reassignOwners();
+        };
+
+        DatumRoute<SyncRecipientsResponse> reassignOwnersCountsRoute = (req, res) -> surveyInstanceService.getReassignOwnersCounts();
 
         ListRoute<SurveyInstance> findForSurveyRunRoute =
                 (req, res) -> surveyInstanceService.findForSurveyRun(getId(req));
@@ -130,6 +164,7 @@ public class SurveyInstanceEndpoint implements Endpoint {
 
             // set status to in progress
             surveyInstanceService.updateStatus(
+                    Optional.empty(),
                     userName,
                     instanceId,
                     ImmutableSurveyInstanceStatusChangeCommand.builder()
@@ -160,6 +195,7 @@ public class SurveyInstanceEndpoint implements Endpoint {
                     SurveyInstanceStatusChangeCommand command = readBody(req, SurveyInstanceStatusChangeCommand.class);
 
                     return surveyInstanceService.updateStatus(
+                            Optional.empty(),
                             getUsername(req),
                             getId(req),
                             command
@@ -218,15 +254,31 @@ public class SurveyInstanceEndpoint implements Endpoint {
                         getId(req),
                         getLong(req, "personId"));
 
+        DatumRoute<Integer> withdrawOpenSurveysForRunRoute =
+                (req, res) -> surveyInstanceService
+                        .withdrawOpenSurveysForRun(
+                                getId(req),
+                                getUsername(req));
+
+        DatumRoute<Integer> withdrawOpenSurveysForTemplateRoute =
+                (req, res) -> surveyInstanceService
+                        .withdrawOpenSurveysForTemplate(
+                                getId(req),
+                                getUsername(req));
 
         getForDatum(getByIdPath, getByIdRoute);
         getForDatum(getPermissionsPath, getPermissionsRoute);
+        postForDatum(reassignRecipientsPath, reassignRecipientsRoute);
+        getForDatum(reassignRecipientsCountsPath, reassignRecipientsCountsRoute);
+        postForDatum(reassignOwnersPath, reassignOwnersRoute);
+        getForDatum(reassignOwnersCountsPath, reassignOwnersCountsRoute);
         getForList(findByEntityRefPath, findByEntityRefRoute);
         getForList(findForRecipientIdPath, findForRecipientIdRoute);
         getForList(findForSurveyRunPath, findForSurveyRunRoute);
         getForList(findPreviousVersionsPath, findPreviousVersionsRoute);
         getForList(findVersionsPath, findVersionsRoute);
         getForList(findRecipientsPath, findRecipientsRoute);
+        getForList(findGroupApproversPath, findGroupApproversRoute);
         getForList(findOwnersPath, findOwnersRoute);
         getForList(findResponsesPath, findResponsesRoute);
         getForList(findPossibleActionsPath, findPossibleActionsRoute);
@@ -240,6 +292,8 @@ public class SurveyInstanceEndpoint implements Endpoint {
         deleteForDatum(deleteOwnerPath, deleteOwnerRoute);
         postForDatum(reportProblemWithQuestionResponsePath, reportProblemWithQuestionResponseRoute);
         postForDatum(copyResponsesPath, copyResponsesRoute);
+        postForDatum(withdrawOpenSurveysForRunPath, withdrawOpenSurveysForRunRoute);
+        postForDatum(withdrawOpenSurveysForTemplatePath, withdrawOpenSurveysForTemplateRoute);
     }
 
 }

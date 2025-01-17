@@ -4,20 +4,52 @@
     import PageHeader from "../../../common/svelte/PageHeader.svelte";
     import {attestationInstanceStore} from "../../../svelte-stores/attestation-instance-store";
     import toasts from "../../../svelte-stores/toast-store";
+    import {surveyInstanceStore} from "../../../svelte-stores/survey-instance-store";
 
     let attestationReassignmentsCall = attestationInstanceStore.getCountsOfRecipientsToReassign();
     $: attestationReassignmentCounts = $attestationReassignmentsCall.data;
 
-    function reassignRecipients() {
+    let surveyRecipientReassignmentsCall = surveyInstanceStore.getReassignRecipientsCounts();
+    $: surveyRecipientReassignmentCounts = $surveyRecipientReassignmentsCall.data;
+
+    let surveyOwnerReassignmentsCall = surveyInstanceStore.getReassignOwnersCounts();
+    $: surveyOwnerReassignmentCounts = $surveyOwnerReassignmentsCall.data;
+
+    function reassignAttestationRecipients() {
         let reassignPromise = attestationInstanceStore.reassignRecipients();
 
-        Promise.resolve(reassignPromise)
+        reassignPromise
             .then(r => {
                 const counts = r.data;
                 toasts.success(`Successfully reassigned recipients. Recipients created: ${counts?.recipientsCreatedCount}, Recipients removed: ${counts?.recipientsRemovedCount}`);
             })
             .then(r => attestationReassignmentsCall = attestationInstanceStore.getCountsOfRecipientsToReassign(true))
             .catch(e => toasts.error("Could not reassign recipients: " + e.error));
+    }
+
+
+    function reassignSurveyRecipients() {
+        let reassignPromise = surveyInstanceStore.reassignRecipients();
+
+        reassignPromise
+            .then(r => {
+                const counts = r.data;
+                toasts.success(`Successfully reassigned recipients. Recipients created: ${counts?.recipientsCreatedCount}, Recipients removed: ${counts?.recipientsRemovedCount}`);
+            })
+            .then(() => surveyRecipientReassignmentsCall = surveyInstanceStore.getReassignRecipientsCounts(true))
+            .catch(e => toasts.error("Could not reassign recipients: " + e.error));
+    }
+
+    function reassignSurveyOwners() {
+        let reassignPromise = surveyInstanceStore.reassignOwners();
+
+        reassignPromise
+            .then(r => {
+                const counts = r.data;
+                toasts.success(`Successfully reassigned owners. Owners created: ${counts?.recipientsCreatedCount}, Owners removed: ${counts?.recipientsRemovedCount}`);
+            })
+            .then(() => surveyOwnerReassignmentsCall = surveyInstanceStore.getReassignOwnersCounts(true))
+            .catch(e => toasts.error("Could not reassign owners: " + e.error));
     }
 
 </script>
@@ -51,11 +83,21 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td>Attestations</td>
-                        <td>{attestationReassignmentCounts?.recipientsCreatedCount}</td>
-                        <td>{attestationReassignmentCounts?.recipientsRemovedCount}</td>
-                    </tr>
+                <tr>
+                    <td>Attestation Recipients</td>
+                    <td>{attestationReassignmentCounts?.recipientsCreatedCount}</td>
+                    <td>{attestationReassignmentCounts?.recipientsRemovedCount}</td>
+                </tr>
+                <tr>
+                    <td>Survey Recipients</td>
+                    <td>{surveyRecipientReassignmentCounts?.recipientsCreatedCount}</td>
+                    <td>{surveyRecipientReassignmentCounts?.recipientsRemovedCount}</td>
+                </tr>
+                <tr>
+                    <td>Surveys Owners</td>
+                    <td>{surveyOwnerReassignmentCounts?.recipientsCreatedCount}</td>
+                    <td>{surveyOwnerReassignmentCounts?.recipientsRemovedCount}</td>
+                </tr>
                 </tbody>
             </table>
         </div>
@@ -70,8 +112,28 @@
                 have the required involvement kind.
             </div>
             <button class="btn btn-info"
-                    on:click={() => reassignRecipients()}>
+                    on:click={() => reassignAttestationRecipients()}>
                 Reassign recipients
+            </button>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            <h4>Surveys</h4>
+            <div class="small help-block">
+                This will remove all recipients / owners for surveys instances which are 'In Progress', 'Not Started' or
+                'Rejected' where the person is
+                no longer active and no longer required according to involvement kind ids specified on the run.
+                New recipients / owners will be assigned to any survey instances if they currently
+                have the required involvement kind.
+            </div>
+            <button class="btn btn-info"
+                    on:click={() => reassignSurveyRecipients()}>
+                Reassign recipients
+            </button>
+            <button class="btn btn-info"
+                    on:click={() => reassignSurveyOwners()}>
+                Reassign owners
             </button>
         </div>
     </div>

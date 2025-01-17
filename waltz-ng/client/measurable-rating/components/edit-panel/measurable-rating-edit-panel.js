@@ -20,23 +20,27 @@ import _ from "lodash";
 import {CORE_API} from "../../../common/services/core-api-utils";
 import {initialiseData} from "../../../common";
 import {kindToViewState} from "../../../common/link-utils";
-import {loadAllData, loadDecommData, mkTabs} from "../../measurable-rating-utils";
-import {indexRatingSchemes, mkRatingsKeyHandler} from "../../../ratings/rating-utils";
+import {
+    checkPlannedDecommIsValid, DECOM_ALLOWED_STATUS,
+    determineEditableCategories,
+    loadAllData,
+    mkTab
+} from "../../measurable-rating-utils";
+import {mkRatingsKeyHandler} from "../../../ratings/rating-utils";
 
 import template from "./measurable-rating-edit-panel.html";
 import {displayError} from "../../../common/error-utils";
 import {alignDateToUTC} from "../../../common/date-utils";
 import toasts from "../../../svelte-stores/toast-store";
+import {mkSelectionOptions} from "../../../common/selector-utils";
 
 const bindings = {
-    allocations: "<",
-    allocationSchemes: "<",
     parentEntityRef: "<",
     startingCategoryId: "<?",
     plannedDecommissions: "<?",
     replacementApps: "<?",
     replacingDecommissions: "<?",
-    application: "<"
+    application: "<?"
 };
 
 
@@ -63,7 +67,8 @@ const initialState = {
         instructions: true,
         schemeOverview: false,
         showAllCategories: false,
-        tab: null
+        tab: null,
+        loading: false
     }
 };
 
@@ -74,61 +79,107 @@ function controller($q,
                     userService) {
     const vm = initialiseData(this, initialState);
 
-
     const loadData = (force) => {
-        return loadAllData($q, serviceBroker, vm.parentEntityRef, true, force)
-            .then((r) => {
-                Object.assign(vm, r);
-                recalcTabs();
-                vm.categoriesById = _.keyBy(vm.categories, "id");
-                vm.ratingItemsBySchemeIdByCode = indexRatingSchemes(_.values(vm.ratingSchemesById) || []);
-                if (vm.startingCategoryId) {
-                    vm.activeTab = _.find(vm.tabs, t => t.category.id === vm.startingCategoryId)
-                } else if (!vm.activeTab) {
-                    vm.activeTab = vm.tabs[0];
+        return loadAllData($q, serviceBroker, vm.parentEntityRef, force)
+            .then(r => Object.assign(vm, r))
+            .then(() => {
+
+                const editableCategories = _.filter(vm.categories, d => _.includes(vm.editableCategoryIds, d.category.id));
+                const categoriesWithRatings = _.filter(editableCategories, d => d.ratingCount > 0);
+
+                if (_.isEmpty(categoriesWithRatings)) {
+                    vm.visibility.showAllCategories = true;
                 }
-                vm.onTabChange();
+
+                // Need to filter on the empty categories here
+                vm.tabs = vm.visibility.showAllCategories
+                    ? editableCategories
+                    : categoriesWithRatings;
+
+                vm.categoriesById = _.keyBy(vm.categories, d => d.category.id);
+                vm.hasHiddenTabs = editableCategories.length !== vm.tabs.length;
+
+                const startingCat = _.find(vm.tabs, t => t.category.id === vm.startingCategoryId);
+
+                const startingCategory = _.isEmpty(startingCat)
+                    ? vm.tabs[0]
+                    : startingCat;
+
+                if (startingCategory) {
+                    vm.visibility.tab = startingCategory.category.id;
+                    recalcTabs(startingCategory.category.id);
+                }
+
             })
     };
 
-    const recalcTabs = function () {
-        const hasNoRatings = vm.ratings.length === 0;
-        const showAllCategories = hasNoRatings || vm.visibility.showAllCategories;
-        const allTabs = mkTabs(vm, showAllCategories);
-        vm.tabs = _.filter(allTabs, t => _.includes(vm.userRoles, t.category.ratingEditorRole));
-        vm.hasHiddenTabs = vm.categories.length !== allTabs.length;
-        if (vm.activeTab) {
-            const ratingSchemeItems =  vm.activeTab.ratingSchemeItems;
-            vm.activeTab = _.find(vm.tabs, t => t.category.id === vm.activeTab.category.id);
-            vm.activeTab.ratingSchemeItems = ratingSchemeItems;
-        }
+    const recalcTabs = function (categoryId) {
+        return vm.reloadTabInfo(categoryId, true);
     };
 
-    const getDescription = () => _.get(vm.selected, ["rating", "description"], "");
+    const deselectMeasurable = () => {
+        vm.saveInProgress = false;
+        vm.visibility = Object.assign({}, vm.visibility, {schemeOverview: true, ratingEditor: false});
+    };
+
+    const selectMeasurable = (node) => {
+        const {measurable, allocations} = node;
+        const category = vm.categoriesById[measurable.categoryId];
+        const ratingScheme = vm.ratingSchemesById[category.ratingSchemeId];
+        const hasWarnings = !_.isEmpty(allocations);
+
+        vm.selected = Object.assign({}, node, {category, hasWarnings, ratingScheme});
+        vm.visibility = Object.assign({}, vm.visibility, {schemeOverview: false, ratingEditor: true});
+    };
+
 
     const getRating = () => _.get(vm.selected, ["rating", "rating"]);
 
-    const doRatingSave = (rating, description) => {
-        const currentRating = !_.isEmpty(vm.selected.rating) ? vm.selected.rating.rating : null;
+
+    /**
+     * Generic save function
+     * @param method  the CORE_API method to invoke
+     * @param param  the param
+     * @returns {*}  promise
+     */
+    const doSave = (method, param) => {
         return serviceBroker
             .execute(
-                CORE_API.MeasurableRatingStore.save,
-                [vm.parentEntityRef, vm.selected.measurable.id, rating, currentRating, description])
-            .then(r => { vm.ratings = r.data })
-            .then(() => recalcTabs())
-            .then(() => {
+                method,
+                [vm.parentEntityRef, vm.selected.measurable.id, param])
+            .then((r) => {
+                vm.ratings = r.data;
+                recalcTabs(vm.selected.measurable.categoryId);
                 vm.saveInProgress = false;
-                const newRating = { rating, description };
-                vm.selected = Object.assign({}, vm.selected, { rating: newRating });
-            })
-            .catch(e => {
-                displayError("Could not save rating", e);
-                throw e;
-            })
+            });
+    }
+
+    const doRatingItemSave = (rating) => {
+        return doSave(CORE_API.MeasurableRatingStore.saveRatingItem, rating)
+            .then(() => {
+                const newRating = _.find(vm.ratings, d => d.measurableId === vm.selected.measurable.id)
+                vm.selected = Object.assign({}, vm.selected, {rating: newRating});
+            });
+    };
+
+    const doRatingIsPrimarySave = (isPrimary) => {
+        return doSave(CORE_API.MeasurableRatingStore.saveRatingIsPrimary, isPrimary)
+            .then(() => {
+                const newRating = _.merge({}, vm.selected.rating, {isPrimary})
+                vm.selected = Object.assign({}, vm.selected, {rating: newRating});
+            });
+    };
+
+    const doRatingDescriptionSave = (description) => {
+        return doSave(CORE_API.MeasurableRatingStore.saveRatingDescription, description)
+            .then(() => {
+                const newRating = _.merge({}, vm.selected.rating, {description})
+                vm.selected = Object.assign({}, vm.selected, {rating: newRating});
+            });
     };
 
     const doRemove = () => {
-        if (! vm.selected.rating) return $q.reject();
+        if (!vm.selected.rating) return $q.reject();
 
         vm.saveInProgress = true;
 
@@ -140,29 +191,14 @@ function controller($q,
                 vm.saveInProgress = false;
                 vm.ratings = r.data;
                 vm.selected.rating = null;
-                recalcTabs();
+                vm.selected.decommission = null;
+                vm.selected.replacementApps = [];
+                recalcTabs(vm.selected.measurable.categoryId);
             });
     };
 
-    const deselectMeasurable = () => {
-        vm.saveInProgress = false;
-        vm.selected = Object.assign({}, vm.selected, { measurable: null });
-        vm.visibility = Object.assign({}, vm.visibility, {schemeOverview: true, ratingEditor: false});
-    };
-
-    const selectMeasurable = (node) => {
-        const { measurable, allocations } = node;
-        const category = vm.categoriesById[measurable.categoryId];
-        const ratingScheme = vm.ratingSchemesById[category.ratingSchemeId];
-        const hasWarnings = !_.isEmpty(allocations);
-
-        vm.selected = Object.assign({}, node, { category, hasWarnings, ratingScheme });
-        vm.visibility = Object.assign({}, vm.visibility, {schemeOverview: false, ratingEditor: true});
-    };
-
     const reloadDecommData = () => {
-        return loadDecommData($q, serviceBroker, vm.parentEntityRef, true)
-            .then(r => Object.assign(vm, r));
+        return vm.reloadTabInfo(vm.activeTab.category.id, true);
     };
 
     const saveDecommissionDate = (dateChange)  => {
@@ -176,7 +212,7 @@ function controller($q,
             serviceBroker
                 .execute(
                     CORE_API.MeasurableRatingPlannedDecommissionStore.save,
-                    [vm.parentEntityRef, vm.selected.measurable.id, dateChange])
+                    [vm.selected.rating.id, dateChange])
                 .then(r => {
                     const decom = Object.assign(r.data, {isValid: true});
                     vm.selected = Object.assign({}, vm.selected, {decommission: decom});
@@ -191,15 +227,30 @@ function controller($q,
 
     vm.$onInit = () => {
 
-        userService
+        const allCategoriesPromise = serviceBroker
+            .loadViewData(CORE_API.MeasurableCategoryStore.findAll)
+            .then(r => r.data);
+
+        const permissionsPromise = serviceBroker
+            .loadViewData(CORE_API.PermissionGroupStore.findForParentEntityRef, [vm.parentEntityRef])
+            .then(r => r.data);
+
+        const userRolesPromise = userService
             .whoami()
-            .then(user => vm.userRoles = user.roles)
-            .then(() => loadData(true));
+            .then(user => user.roles);
+
+        $q.all([allCategoriesPromise, permissionsPromise, userRolesPromise])
+            .then(([categories, permissions, userRoles]) =>{
+                const editableCategories = determineEditableCategories(categories, permissions, userRoles);
+                vm.editableCategoryIds = _.map(editableCategories, d => d.id);
+            })
+            .then(() => loadData())
 
         vm.backUrl = $state
             .href(
                 kindToViewState(vm.parentEntityRef.kind),
-                { id: vm.parentEntityRef.id });
+                {id: vm.parentEntityRef.id});
+
         vm.allocationsByMeasurableId = _.groupBy(vm.allocations, a => a.measurableId);
         vm.allocationSchemesById = _.keyBy(vm.allocationSchemes, s => s.id);
     };
@@ -233,36 +284,21 @@ function controller($q,
             .finally(reloadDecommData);
     };
 
-    vm.checkPlannedDecomDateIsValid = (decomDate) => {
-
-        const appDate = new Date(vm.application.plannedRetirementDate);
-        const newDecomDate = new Date(decomDate);
-
-        const sameDate = appDate.getFullYear() === newDecomDate.getFullYear()
-            && appDate.getMonth() === newDecomDate.getMonth()
-            && appDate.getDate() === newDecomDate.getDate();
-
-        return appDate > newDecomDate || sameDate;
-    };
-
     vm.onSaveDecommissionDate = (dateChange) => {
+        const result = checkPlannedDecommIsValid(dateChange, vm.application);
 
-        if (vm.application.entityLifecycleStatus === "REMOVED"){
-            toasts.error("Decommission date cannot be set. This application is no longer active");
-            return;
-        }
-
-        if (_.isNull(vm.application.plannedRetirementDate) || vm.checkPlannedDecomDateIsValid(dateChange.newVal)){
+        if (result.status === DECOM_ALLOWED_STATUS.FAIL) {
+            toasts.error(result.message);
+        } else if (result.status === DECOM_ALLOWED_STATUS.PASS) {
             saveDecommissionDate(dateChange);
-
-        } else {
-            const appDate = new Date(vm.application.plannedRetirementDate).toDateString();
-
-            if (!confirm(`This decommission date is later then the planned retirement date of the application: ${appDate}. Are you sure you want to save it?`)){
+        } else if (result.status === DECOM_ALLOWED_STATUS.CONFIRM) {
+            if (confirm(`${result.message}. Are you sure you want to save it?`)) {
+                saveDecommissionDate(dateChange);
+            } else {
                 toasts.error("Decommission date was not saved");
-                return;
             }
-            saveDecommissionDate(dateChange)
+        } else {
+            toasts.warning(`[Developer message]: Did not understand decomm validity test result: ${result.status}`);
         }
     };
 
@@ -294,14 +330,34 @@ function controller($q,
 
         return r === "X"
             ? doRemove()
-                .then(() => toasts.success(`Removed: ${vm.selected.measurable.name}`))
-            : doRatingSave(r, getDescription())
-                .then(() => toasts.success(`Saved: ${vm.selected.measurable.name}`))
+                .then(() => {
+                    toasts.success(`Removed: ${vm.selected.measurable.name}`)
+                })
+                .catch(e => {
+                    vm.saveInProgress = false;
+                    displayError("Could not remove measurable rating.", e);
+                    deselectMeasurable();
+                })
+            : doRatingItemSave(r)
+                .then(() => {
+                    toasts.success(`Saved: ${vm.selected.measurable.name}`)
+                })
+                .catch(e => {
+                    displayError("Could not save rating", e);
+                    throw e;
+                })
+                .finally(() => {
+                    deselectMeasurable();
+                });
     };
 
     vm.onSaveComment = (comment) => {
-        return doRatingSave(getRating(), comment)
+        return doRatingDescriptionSave(comment)
             .then(() => toasts.success(`Saved Comment for: ${vm.selected.measurable.name}`))
+            .catch(e => {
+                displayError("Could not save comment for rating", e);
+                throw e;
+            })
     };
 
     vm.doCancel = () => {
@@ -317,7 +373,7 @@ function controller($q,
                 .then(r => {
                     toasts.info("Removed all ratings for category which are not read-only");
                     vm.ratings = r.data;
-                    recalcTabs();
+                    recalcTabs(categoryId);
                 })
                 .catch(e => {
                     const message = "Error removing all ratings for category: " + e.message;
@@ -326,30 +382,43 @@ function controller($q,
         }
     };
 
+    vm.onPrimaryToggle = () => {
+        doRatingIsPrimarySave(!vm.selected.rating.isPrimary)
+            .then(() => toasts.success(`Saved primary indicator for: ${vm.selected.measurable.name}`))
+            .catch(e => {
+                deselectMeasurable();
+                displayError("Could not save primary indicator", e);
+                throw e;
+            });
+    };
 
-    vm.onTabChange = () => {
+    vm.onTabChange = (categoryId, force = false) => {
         deselectMeasurable();
+        return vm.reloadTabInfo(categoryId, force)
+    };
 
-        if(_.isUndefined(vm.activeTab)){
-            vm.activeTab = _.first(vm.tabs);
-        }
-
-        serviceBroker
+    vm.reloadTabInfo = (categoryId, force = false) => {
+        vm.visibility.loading = true;
+        return serviceBroker
             .loadViewData(
-                CORE_API.RatingSchemeStore.findRatingsForEntityAndMeasurableCategory,
-                [vm.parentEntityRef, vm.activeTab.category.id])
+                CORE_API.MeasurableRatingStore.getViewByCategoryAndAppSelector,
+                [categoryId, mkSelectionOptions(vm.parentEntityRef)],
+                {force})
             .then(r => {
-                vm.activeTab.ratingSchemeItems = r.data;
+                const viewData = r.data;
+                vm.activeTab = mkTab(viewData, vm.application,true);
+
                 vm.onKeypress = mkRatingsKeyHandler(
                     vm.activeTab.ratingSchemeItems,
                     vm.onRatingSelect,
                     vm.doCancel);
-            });
+            })
+            .then(() => vm.visibility.loading = false);
     };
 
     vm.onShowAllTabs = () => {
         vm.visibility.showAllCategories = true;
-        recalcTabs();
+        loadData();
     };
 
 }

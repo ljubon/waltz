@@ -61,7 +61,9 @@ public class PhysicalFlowIdSelectorFactory implements IdSelectorFactory {
             case DATA_TYPE:
                 return mkForDataType(options);
             case APPLICATION:
+            case ACTOR:
             case APP_GROUP:
+            case END_USER_APPLICATION:
             case CHANGE_INITIATIVE:
             case MEASURABLE:
             case ORG_UNIT:
@@ -89,7 +91,8 @@ public class PhysicalFlowIdSelectorFactory implements IdSelectorFactory {
         return DSL
                 .select(PHYSICAL_FLOW.ID)
                 .from(PHYSICAL_FLOW)
-                .where(PHYSICAL_FLOW.LOGICAL_FLOW_ID.in(logicalFlowSelector));
+                .where(PHYSICAL_FLOW.LOGICAL_FLOW_ID.in(logicalFlowSelector)
+                        .and(getLifecycleCondition(options)));
 
     }
 

@@ -17,17 +17,22 @@
  */
 
 export default {
-    "ADMIN" : {
+    "ADMIN": {
         key: "ADMIN",
         name: "Admin",
         description: "Administrative capabilities"
     },
-    "APP_EDITOR" : {
+    "AGGREGATE_OVERLAY_DIAGRAM_EDITOR": {
+        key: "AGGREGATE_OVERLAY_DIAGRAM_EDITOR",
+        name: "Aggregate Overlay Diagram Editor",
+        description: "Can create overlay diagram instances and edit callout annotations"
+    },
+    "APP_EDITOR": {
         key: "APP_EDITOR",
         name: "App editor",
         description: "Can modify application information"
     },
-    "ATTESTATION_ADMIN" : {
+    "ATTESTATION_ADMIN": {
         key: "ATTESTATION_ADMIN",
         name: "Attestation Admin",
         description: "Can manage attestation runs"
@@ -62,6 +67,11 @@ export default {
         name: "Change Set editor",
         description: "Can modify change sets"
     },
+    "EUDA_ADMIN" : {
+        key: "EUDA_ADMIN",
+        name: "EUDA Administrator",
+        description: "Can promote EUDAs to full applications"
+    },
     "LINEAGE_EDITOR" : {
         key: "LINEAGE_EDITOR",
         name: "Lineage editor",
@@ -72,27 +82,32 @@ export default {
         name: "Logical flow editor",
         description: "Can update logical flows"
     },
-    "ORG_UNIT_EDITOR" : {
+    "ORG_UNIT_EDITOR": {
         key: "ORG_UNIT_EDITOR",
         name: "Org Unit editor",
         description: "Can modify org units"
     },
-    "RATING_EDITOR" : {
+    "RATING_EDITOR": {
         key: "RATING_EDITOR",
         name: "Rating edit",
         description: "Can assign ratings to applications"
     },
-    "SCENARIO_ADMIN" : {
+    "REPORT_GRID_ADMIN": {
+        key: "REPORT_GRID_ADMIN",
+        name: "Report Grid Admin",
+        description: "Can update report grid kind"
+    },
+    "SCENARIO_ADMIN": {
         key: "SCENARIO_ADMIN",
         name: "Scenario Admin",
         description: "Can create roadmaps and scenarios"
     },
-    "SCENARIO_EDITOR" : {
+    "SCENARIO_EDITOR": {
         key: "SCENARIO_EDITOR",
         name: "Scenario edit",
         description: "Can modify the contents of roadmap scenarios"
     },
-    "SURVEY_ADMIN" : {
+    "SURVEY_ADMIN": {
         key: "SURVEY_ADMIN",
         name: "Survey Admin",
         description: "Can administer survey runs"

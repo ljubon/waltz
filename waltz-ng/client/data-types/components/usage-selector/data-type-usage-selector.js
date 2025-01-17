@@ -28,7 +28,8 @@ import {reduceToSelectedNodesOnly} from "../../../common/hierarchy-utils";
 const bindings = {
     parentEntityRef: "<",
     onDirty: "<?",
-    onRegisterSave: "<?"
+    onRegisterSave: "<?",
+    onSelect: "<?"
 };
 
 
@@ -42,6 +43,7 @@ const initialState = {
     suggestedDataTypes: [],
     showAllDataTypes: false,
     onDirty: (d) => console.log("dtus:onDirty - default impl", d),
+    onSelect: (d) => console.log("dtus:onSelect - default impl", d),
     onRegisterSave: (f) => console.log("dtus:onRegisterSave - default impl", f)
 };
 
@@ -88,7 +90,7 @@ function controller($q, serviceBroker) {
     const loadSuggestedDataTypes = () => {
         return serviceBroker
             .loadViewData(
-                CORE_API.DataTypeDecoratorStore.findSuggestedByEntityRef,
+                CORE_API.DataTypeStore.findSuggestedByEntityRef,
                 [vm.parentEntityRef],
                 {force: true})
             .then(r => _.filter(r.data, dt => !dt.unknown));
@@ -110,6 +112,8 @@ function controller($q, serviceBroker) {
         vm.visibleDataTypes = vm.showAllDataTypes
             ? vm.enrichedDataTypes
             : reduceToSelectedNodesOnly(vm.enrichedDataTypes, suggestedAndSelectedTypes);
+
+        return vm.enrichedDataTypes;
     };
 
     const doSave = () => {
@@ -147,7 +151,9 @@ function controller($q, serviceBroker) {
         let dt = vm.enrichedDataTypesById[id];
         while (dt) {
             const parent = vm.enrichedDataTypesById[dt.parentId];
-            if (_.get(parent, ["dataType", "concrete"], true) === false) {
+            const parentIsAbstract = _.get(parent, ["dataType", "concrete"], true) === false;
+            const parentIsRemovable = _.get(parent, ["usage", "isRemovable"], false) === true;
+            if (parentIsAbstract && parentIsRemovable) {
                 vm.typeUnchecked(parent.id, parent);
             }
             dt = parent;
@@ -179,7 +185,7 @@ function controller($q, serviceBroker) {
                 vm.used = usage;
                 vm.suggestedDataTypes = suggestions;
                 vm.onDirty(false);
-                postLoadActions(usage, suggestions);
+                return postLoadActions(usage, suggestions);
             });
     };
 
@@ -233,6 +239,10 @@ function controller($q, serviceBroker) {
     };
 
     vm.nameProviderFn = d => d.dataType.name;
+
+    vm.click = (key, item) => {
+        vm.onSelect(item);
+    };
 }
 
 

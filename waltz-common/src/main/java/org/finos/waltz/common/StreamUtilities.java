@@ -73,6 +73,12 @@ public class StreamUtilities {
     }
 
 
+    public static Stream<String> lines(String multiLineStr) {
+        String[] lines = multiLineStr.split("(\n|\r|\r\n)");
+        return Stream.of(lines);
+    }
+
+
     public static class Siphon<T> implements Predicate<T> {
         private final Predicate<T> pred;
         private final List<T> results = new ArrayList<>();
@@ -85,12 +91,21 @@ public class StreamUtilities {
         public boolean test(T t) {
             boolean check = pred.test(t);
             if (check) results.add(t);
-            return ! check;
+            return !check;
         }
 
         public List<T> getResults() {
             return results;
         }
+
+        public Stream<T> stream() {
+            return results.stream();
+        }
+
+        public boolean hasResults() {
+            return !results.isEmpty();
+        }
+
     }
 
 

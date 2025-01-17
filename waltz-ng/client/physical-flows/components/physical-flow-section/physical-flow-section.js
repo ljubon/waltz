@@ -33,6 +33,7 @@ function determineColumnDefs(entityKind) {
     switch (entityKind) {
         case "PHYSICAL_SPECIFICATION":
             return [
+                columnDef.name,
                 columnDef.extId,
                 columnDef.source,
                 columnDef.target,
@@ -42,10 +43,9 @@ function determineColumnDefs(entityKind) {
         case "TAG":
             return [
                 columnDef.name,
+                columnDef.extId,
                 columnDef.source,
                 columnDef.target,
-                columnDef.extId,
-                columnDef.observation,
                 columnDef.frequency,
                 columnDef.description];
         default:

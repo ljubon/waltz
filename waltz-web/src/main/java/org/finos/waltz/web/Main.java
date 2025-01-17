@@ -18,30 +18,34 @@
 
 package org.finos.waltz.web;
 
-import org.finos.waltz.service.DIConfiguration;
-import org.finos.waltz.service.settings.SettingsService;
-import org.finos.waltz.web.endpoints.Endpoint;
-import org.finos.waltz.web.endpoints.api.StaticResourcesEndpoint;
-import org.finos.waltz.web.endpoints.extracts.DataExtractor;
 import org.finos.waltz.common.LoggingUtilities;
 import org.finos.waltz.common.exception.DuplicateKeyException;
 import org.finos.waltz.common.exception.InsufficientPrivelegeException;
 import org.finos.waltz.common.exception.NotFoundException;
 import org.finos.waltz.common.exception.UpdateFailedException;
+import org.finos.waltz.service.DIConfiguration;
+import org.finos.waltz.service.settings.SettingsService;
+import org.finos.waltz.web.endpoints.Endpoint;
 import org.finos.waltz.web.endpoints.EndpointUtilities;
+import org.finos.waltz.web.endpoints.api.StaticResourcesEndpoint;
+import org.finos.waltz.web.endpoints.extracts.DataExtractor;
 import org.jooq.exception.DataAccessException;
+import org.jooq.exception.NoDataFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.dao.DataIntegrityViolationException;
 import spark.Request;
 import spark.Response;
 import spark.Spark;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.TimeZone;
 
-import static org.finos.waltz.web.WebUtilities.reportException;
+import static java.lang.String.format;
 import static org.finos.waltz.common.DateTimeUtilities.UTC;
+import static org.finos.waltz.web.WebUtilities.reportException;
 import static spark.Spark.*;
 
 public class Main {
@@ -49,6 +53,7 @@ public class Main {
     private static final Logger LOG = LoggerFactory.getLogger(Main.class);
     private final static String GZIP_ENABLED_NAME = "server.gzip.enabled";
     private final static String GZIP_MIN_SIZE_NAME = "server.gzip.minimum-size";
+    private final static String OAUTH_PROVIDER_DETAILS = "oauth.provider.details";
 
     private static AnnotationConfigApplicationContext ctx;
 
@@ -70,7 +75,7 @@ public class Main {
 
     private void startHttpServer() {
         String listenPortStr = System.getProperty("waltz.port", "8443");
-        boolean sslEnabled = Boolean.valueOf(System.getProperty("waltz.ssl.enabled", "false"));
+        boolean sslEnabled = Boolean.parseBoolean(System.getProperty("waltz.ssl.enabled", "false"));
 
         String home = System.getProperty("user.home");
 
@@ -107,6 +112,17 @@ public class Main {
 
         ctx = new AnnotationConfigApplicationContext(DIConfiguration.class);
 
+        get("api/oauthdetails", (req, resp) -> {
+            resp.header("Content-Type", "application/javascript");
+            SettingsService settingsService = ctx.getBean(SettingsService.class);
+
+            Optional<String> OauthProviderDetails = Optional.of(settingsService
+                    .getValue(OAUTH_PROVIDER_DETAILS)
+                    .orElse("{name : null}"));
+
+            return "const oauthdetails = " + OauthProviderDetails.get() + ";";
+        });
+
         Map<String, Endpoint> endpoints = ctx.getBeansOfType(Endpoint.class);
         endpoints.forEach((name, endpoint) -> {
             LOG.info("Registering Endpoint: {}", name);
@@ -131,15 +147,23 @@ public class Main {
 
     private void registerExceptionHandlers() {
 
-        EndpointUtilities.addExceptionHandler(InsufficientPrivelegeException.class, (e, req, resp) ->
-                reportException(403, "NOT_AUTHORIZED", e.getMessage(), resp, LOG));
-
         EndpointUtilities.addExceptionHandler(NotFoundException.class, (e, req, res) -> {
             String message = "Not found exception" + e.getMessage();
-            LOG.error(message);
+            LOG.error(message, e);
             reportException(
-                    404,
+                    HttpStatus.NOT_FOUND_404,
                     e.getCode(),
+                    message,
+                    res,
+                    LOG);
+        });
+
+        EndpointUtilities.addExceptionHandler(NoDataFoundException.class, (e, req, res) -> {
+            String message = "Not found exception" + e.getMessage();
+            LOG.error(message, e);
+            reportException(
+                    HttpStatus.NOT_FOUND_404,
+                    "NO_DATA",
                     message,
                     res,
                     LOG);
@@ -147,9 +171,9 @@ public class Main {
 
         EndpointUtilities.addExceptionHandler(UpdateFailedException.class, (e, req, res) -> {
             String message = "Update failed exception:" + e.getMessage();
-            LOG.error(message);
+            LOG.error(message, e);
             reportException(
-                    400,
+                    HttpStatus.BAD_REQUEST_400,
                     e.getCode(),
                     message,
                     res,
@@ -158,20 +182,31 @@ public class Main {
 
         EndpointUtilities.addExceptionHandler(DuplicateKeyException.class, (e, req, res) -> {
             String message = "Duplicate detected: " + e.getMessage();
-            LOG.error(message);
+            LOG.error(message, e);
             reportException(
-                    500,
+                    HttpStatus.CONFLICT_409,
                     "DUPLICATE",
                     message,
                     res,
                     LOG);
         });
 
-        EndpointUtilities.addExceptionHandler(DataAccessException.class, (e, req, resp) -> {
-            String message = "Exception: " + e.getCause().getMessage();
-            LOG.error(message);
+        EndpointUtilities.addExceptionHandler(DataIntegrityViolationException.class, (e, req, res) -> {
+            String message = "Data integrity violation detected: " + e.getMessage();
+            LOG.error(message, e);
             reportException(
-                    400,
+                    HttpStatus.CONFLICT_409,
+                    "DATA_INTEGRITY",
+                    message,
+                    res,
+                    LOG);
+        });
+
+        EndpointUtilities.addExceptionHandler(DataAccessException.class, (e, req, resp) -> {
+            String message = format("Data Access Exception: %s [%s]", e.getCause(), e.getClass().getName());
+            LOG.error(message, e);
+            reportException(
+                    HttpStatus.BAD_REQUEST_400,
                     e.sqlState(),
                     message,
                     resp,
@@ -180,9 +215,9 @@ public class Main {
 
         EndpointUtilities.addExceptionHandler(IllegalArgumentException.class, (e, req, resp) -> {
             String message = "Illegal Argument Exception: " + e.getMessage();
-            LOG.error(message);
+            LOG.error(message, e);
             reportException(
-                    400,
+                    HttpStatus.BAD_REQUEST_400,
                     "ILLEGAL ARGUMENT",
                     message,
                     resp,
@@ -191,25 +226,43 @@ public class Main {
 
         EndpointUtilities.addExceptionHandler(WebException.class, (e, req, res) -> {
             String message = "Web exception: " + e.getMessage();
-            LOG.error(message);
+            LOG.error(message, e);
             reportException(
-                    500,
+                    HttpStatus.INTERNAL_SERVER_ERROR_500,
                     e.getCode(),
                     message,
                     res,
                     LOG);
         });
 
+        EndpointUtilities.addExceptionHandler(NotAuthorizedException.class, (e, req, res) -> {
+            reportException(
+                    HttpStatus.FORBIDDEN_403,
+                    "NOT_AUTHORIZED",
+                    e.getMessage(),
+                    res,
+                    LOG);
+        });
+
+        EndpointUtilities.addExceptionHandler(InsufficientPrivelegeException.class, (e, req, resp) ->
+                reportException(
+                        HttpStatus.FORBIDDEN_403,
+                        "NOT_AUTHORIZED",
+                        e.getMessage(),
+                        resp,
+                        LOG));
+
         EndpointUtilities.addExceptionHandler(Exception.class, (e, req, res) -> {
             String message = "Generic Exception: " + e.getMessage() + " / " + e.getClass().getCanonicalName();
             LOG.error(message, e);
             reportException(
-                    500,
+                    HttpStatus.INTERNAL_SERVER_ERROR_500,
                     "unknown",
                     message,
                     res,
                     LOG);
         });
+
     }
 
 

@@ -1,7 +1,4 @@
 <script>
-
-    import {selectedGrid} from "../report-grid-store";
-    import {reportGridMemberStore} from "../../../../svelte-stores/report-grid-member-store";
     import {reportGridMember} from "../report-grid-utils";
     import Icon from "../../../../common/svelte/Icon.svelte";
     import SearchInput from "../../../../common/svelte/SearchInput.svelte";
@@ -10,75 +7,55 @@
     import AddNewSubscriberPanel from "./AddNewSubscriberPanel.svelte";
     import toasts from "../../../../svelte-stores/toast-store";
     import ReportGridPersonOverview from "./ReportGridPersonOverview.svelte";
+    import {gridService} from "../report-grid-service";
+    import {displayError} from "../../../../common/error-utils";
 
     const Modes = {
         VIEW: "VIEW",
         CREATE: "CREATE"
-    }
+    };
 
     let activeMode = Modes.VIEW;
     let selectedMember = null;
-
     let qry = "";
 
-    $: membersCall = $selectedGrid?.definition?.id && reportGridMemberStore.findByGridId($selectedGrid?.definition.id, true);
-    $: members = $membersCall?.data || [];
+    const {gridMembers} = gridService;
 
-    $: peopleCall = $selectedGrid?.definition?.id && reportGridMemberStore.findPeopleByGridId($selectedGrid?.definition.id, true);
-    $: people = $peopleCall?.data || [];
+    function editRole(person, role) {
+        return gridService
+            .updateMember(person.email, role)
+            .then(() => {
+                toasts.success("Updated user role to:" + role)
+                activeMode = Modes.VIEW;
+                selectedMember = null;
+            })
+            .catch(e => displayError("Could not update role.", e))
+    }
 
-    $: membersList = _.isEmpty(qry)
-        ? members
-        : termSearch(members, qry, ["userId", "role"]);
+    function deleteMember(member) {
+        return gridService
+            .removeMember(member.user.email)
+            .then(() => {
+                selectedMember = null;
+                toasts.success(`Removed ${member.user.displayName} from members list`)
+            });
+    }
 
-    $: encrichedMembersList = _.map(
-        membersList,
-        d => Object.assign({}, d, {person: _.find(people, p => p.email === d.userId)}));
+    function selectPerson(p) {
+        return gridService
+            .updateMember(p.email, reportGridMember.VIEWER.key)
+            .then(() => {
+                toasts.success(`Successfully saved ${p.name} as a subscriber to this grid`);
+                activeMode = Modes.VIEW;
+            })
+            .catch(e => toasts.error(`Could not save ${p.name} as a subscriber to this grid.` + e.error))
+    }
 
     function selectMember(member) {
         selectedMember = member;
     }
 
-    function editRole(member, role) {
-        const updateCmd = {
-            userId: member.userId,
-            role
-        }
-
-        let updatePromise = reportGridMemberStore.updateRole($selectedGrid?.definition?.id, updateCmd);
-
-        Promise.resolve(updatePromise)
-            .then(r => {
-                toasts.success("Updated user role to:" + role)
-                reloadMembers();
-                activeMode = Modes.VIEW;
-                selectedMember = null;
-            })
-            .catch(e => toasts.error("Could not update role: " + e))
-    }
-
-    function reloadMembers(){
-        membersCall = reportGridMemberStore.findByGridId($selectedGrid?.definition.id, true);
-        peopleCall = reportGridMemberStore.findPeopleByGridId($selectedGrid?.definition.id, true);
-    }
-
-    function deleteMember(member) {
-
-        const reportGridMember = {
-            gridId: member.gridId,
-            userId: member.userId,
-            role: member.role
-        }
-
-        let deletePromise = reportGridMemberStore.deleteRole(reportGridMember);
-        Promise.resolve(deletePromise)
-            .then(r => {
-                reloadMembers();
-                selectedMember = null;
-            })
-    }
-
-    function cancel(){
+    function cancel() {
         activeMode = Modes.VIEW;
     }
 
@@ -86,23 +63,9 @@
         activeMode = Modes.CREATE;
     }
 
-    function selectPerson(p) {
-        const cmd = {
-            gridId: $selectedGrid?.definition?.id,
-            userId: p.email,
-            role: reportGridMember.VIEWER.key
-        }
-
-        let createPromise = reportGridMemberStore.create(cmd);
-
-        Promise.resolve(createPromise)
-            .then(r => {
-                toasts.success(`Successfully added ${p.name} as a subscriber to ${$selectedGrid?.definition.name} grid`);
-                reloadMembers();
-                activeMode = Modes.VIEW;
-            })
-            .catch(e => toasts.error(`Could not add ${p.name} as a subscriber to this grid.` + e.error))
-    }
+    $: membersList = _.isEmpty(qry)
+        ? $gridMembers
+        : termSearch($gridMembers, qry, ["user.displayName", "role"]);
 
 </script>
 
@@ -111,7 +74,7 @@
         <div class="help-block small">
             Listed below are the owners and viewers of this report grid.
         </div>
-        {#if _.size(members) > 10}
+        {#if _.size($gridMembers) > 10}
             <SearchInput bind:value={qry}
                          placeholder="Search people"/>
             <br>
@@ -128,12 +91,16 @@
                 </tr>
             </thead>
             <tbody>
-            {#each encrichedMembersList as member}
+            {#each membersList as member}
                 <tr class="clickable"
-                    class:selected={selectedMember?.userId === member?.userId}
+                    class:selected={selectedMember?.user.id === member?.user.id}
                     on:click={() => selectMember(member)}>
-                    <td>{member?.person?.displayName}</td>
-                    <td>{reportGridMember[member.role].name}</td>
+                    <td class:memberInactive={member.user?.isRemoved}>
+                        {member.user?.displayName}
+                    </td>
+                    <td>
+                        {reportGridMember[member.role].name}
+                    </td>
                 </tr>
             {/each}
             <tr class="clickable"
@@ -150,7 +117,7 @@
     </div>
     <div class="col-sm-7">
         {#if activeMode === Modes.VIEW}
-            <ReportGridPersonOverview members={members}
+            <ReportGridPersonOverview members={$gridMembers}
                                       selectedMember={selectedMember}
                                       onDelete={deleteMember}
                                       onEdit={editRole}/>
@@ -165,5 +132,9 @@
 <style>
     .selected{
         background: #f3f9ff;
+    }
+
+    .memberInactive {
+        text-decoration: line-through;
     }
 </style>

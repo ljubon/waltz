@@ -18,25 +18,55 @@
 
 package org.finos.waltz.data.physical_specification;
 
-import org.finos.waltz.schema.tables.DataType;
-import org.finos.waltz.schema.tables.*;
-import org.finos.waltz.schema.tables.records.PhysicalSpecificationRecord;
 import org.finos.waltz.data.InlineSelectFieldFactory;
-import org.finos.waltz.model.*;
+import org.finos.waltz.model.EntityKind;
+import org.finos.waltz.model.EntityLifecycleStatus;
+import org.finos.waltz.model.EntityReference;
+import org.finos.waltz.model.Operation;
+import org.finos.waltz.model.Severity;
+import org.finos.waltz.model.UserTimestamp;
 import org.finos.waltz.model.physical_flow.PhysicalFlowParsed;
-import org.finos.waltz.model.physical_specification.DataFormatKind;
+import org.finos.waltz.model.physical_specification.DataFormatKindValue;
 import org.finos.waltz.model.physical_specification.ImmutablePhysicalSpecification;
 import org.finos.waltz.model.physical_specification.PhysicalSpecification;
-import org.jooq.*;
+import org.finos.waltz.model.user.SystemRole;
+import org.finos.waltz.schema.tables.DataType;
+import org.finos.waltz.schema.tables.LogicalFlow;
+import org.finos.waltz.schema.tables.LogicalFlowDecorator;
+import org.finos.waltz.schema.tables.PhysicalFlow;
+import org.finos.waltz.schema.tables.PhysicalSpecDataType;
+import org.finos.waltz.schema.tables.records.PhysicalSpecificationRecord;
+import org.jooq.Condition;
+import org.jooq.DSLContext;
+import org.jooq.Field;
+import org.jooq.Record;
+import org.jooq.Record1;
+import org.jooq.Record3;
+import org.jooq.Record4;
+import org.jooq.Record6;
+import org.jooq.RecordMapper;
+import org.jooq.Select;
+import org.jooq.SelectConditionStep;
+import org.jooq.SelectHavingConditionStep;
+import org.jooq.SelectJoinStep;
+import org.jooq.SelectOrderByStep;
 import org.jooq.impl.DSL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
 import java.util.Collection;
-import java.util.List;
 import java.util.Set;
 
+import static org.finos.waltz.common.Checks.checkFalse;
+import static org.finos.waltz.common.Checks.checkNotNull;
+import static org.finos.waltz.common.ListUtilities.newArrayList;
+import static org.finos.waltz.common.SetUtilities.asSet;
+import static org.finos.waltz.common.SetUtilities.union;
+import static org.finos.waltz.data.logical_flow.LogicalFlowDao.LOGICAL_NOT_REMOVED;
+import static org.finos.waltz.data.physical_flow.PhysicalFlowDao.PHYSICAL_FLOW_NOT_REMOVED;
+import static org.finos.waltz.model.EntityReference.mkRef;
+import static org.finos.waltz.schema.Tables.USER_ROLE;
 import static org.finos.waltz.schema.tables.ChangeLog.CHANGE_LOG;
 import static org.finos.waltz.schema.tables.DataType.DATA_TYPE;
 import static org.finos.waltz.schema.tables.LogicalFlow.LOGICAL_FLOW;
@@ -44,13 +74,12 @@ import static org.finos.waltz.schema.tables.LogicalFlowDecorator.LOGICAL_FLOW_DE
 import static org.finos.waltz.schema.tables.PhysicalFlow.PHYSICAL_FLOW;
 import static org.finos.waltz.schema.tables.PhysicalSpecDataType.PHYSICAL_SPEC_DATA_TYPE;
 import static org.finos.waltz.schema.tables.PhysicalSpecification.PHYSICAL_SPECIFICATION;
-import static org.finos.waltz.common.Checks.checkFalse;
-import static org.finos.waltz.common.Checks.checkNotNull;
-import static org.finos.waltz.common.ListUtilities.newArrayList;
-import static org.finos.waltz.data.logical_flow.LogicalFlowDao.LOGICAL_NOT_REMOVED;
-import static org.finos.waltz.data.physical_flow.PhysicalFlowDao.PHYSICAL_FLOW_NOT_REMOVED;
-import static org.finos.waltz.model.EntityReference.mkRef;
-import static org.jooq.impl.DSL.*;
+import static org.jooq.impl.DSL.concat;
+import static org.jooq.impl.DSL.count;
+import static org.jooq.impl.DSL.exists;
+import static org.jooq.impl.DSL.notExists;
+import static org.jooq.impl.DSL.select;
+import static org.jooq.impl.DSL.val;
 
 @Repository
 public class PhysicalSpecificationDao {
@@ -79,12 +108,13 @@ public class PhysicalSpecificationDao {
                         r.getValue(owningEntityNameField)))
                 .name(record.getName())
                 .description(record.getDescription())
-                .format(DataFormatKind.valueOf(record.getFormat()))
+                .format(DataFormatKindValue.of(record.getFormat()))
                 .lastUpdatedAt(record.getLastUpdatedAt().toLocalDateTime())
                 .lastUpdatedBy(record.getLastUpdatedBy())
                 .provenance(record.getProvenance())
                 .isRemoved(record.getIsRemoved())
                 .created(UserTimestamp.mkForUser(record.getCreatedBy(), record.getCreatedAt()))
+                .isReadOnly(record.getIsReadonly())
                 .build();
     };
 
@@ -140,16 +170,22 @@ public class PhysicalSpecificationDao {
     }
 
 
-    public List<PhysicalSpecification> findBySelector(Select<Record1<Long>> selector) {
+    public Set<PhysicalSpecification> findBySelector(Select<Record1<Long>> selector) {
         return basicSelectByCondition(PHYSICAL_SPECIFICATION.ID.in(selector))
-                .fetch(TO_DOMAIN_MAPPER);
+                .fetchSet(TO_DOMAIN_MAPPER);
+    }
+
+
+    public Collection<PhysicalSpecification> findByExternalId(String externalId) {
+        return basicSelectByCondition(PHYSICAL_SPECIFICATION.EXTERNAL_ID.eq(externalId))
+                .fetchSet(TO_DOMAIN_MAPPER);
     }
 
 
     public PhysicalSpecification getByParsedFlow(PhysicalFlowParsed flow) {
 
         Condition condition = PHYSICAL_SPECIFICATION.NAME.eq(flow.name())
-                        .and(PHYSICAL_SPECIFICATION.FORMAT.eq(flow.format().name()))
+                .and(PHYSICAL_SPECIFICATION.FORMAT.eq(flow.format().value()))
                         .and(PHYSICAL_SPECIFICATION.OWNING_ENTITY_KIND.eq(flow.owner().kind().name()))
                         .and(PHYSICAL_SPECIFICATION.OWNING_ENTITY_ID.eq(flow.owner().id()))
                         .and(PHYSICAL_SPEC_NOT_REMOVED);
@@ -184,9 +220,8 @@ public class PhysicalSpecificationDao {
         record.setOwningEntityId(specification.owningEntity().id());
 
         record.setName(specification.name());
-        record.setExternalId(specification.externalId().orElse(""));
         record.setDescription(specification.description());
-        record.setFormat(specification.format().name());
+        record.setFormat(specification.format().value());
         record.setLastUpdatedAt(Timestamp.valueOf(specification.lastUpdatedAt()));
         record.setLastUpdatedBy(specification.lastUpdatedBy());
         record.setIsRemoved(specification.isRemoved());
@@ -194,6 +229,9 @@ public class PhysicalSpecificationDao {
 
         record.setCreatedAt(specification.created().get().atTimestamp());
         record.setCreatedBy(specification.created().get().by());
+        record.setIsReadonly(specification.isReadOnly());
+
+        specification.externalId().ifPresent(record::setExternalId);
 
         record.store();
         return record.getId();
@@ -216,7 +254,8 @@ public class PhysicalSpecificationDao {
         return dsl
                 .update(PHYSICAL_SPECIFICATION)
                 .set(PHYSICAL_SPECIFICATION.EXTERNAL_ID, externalId)
-                .where(PHYSICAL_SPECIFICATION.ID.eq(specificationId))
+                .where(PHYSICAL_SPECIFICATION.ID.eq(specificationId)
+                        .and(PHYSICAL_SPECIFICATION.IS_READONLY.isFalse()))
                 .execute();
     }
 
@@ -233,7 +272,8 @@ public class PhysicalSpecificationDao {
         return dsl
                 .update(PHYSICAL_SPECIFICATION)
                 .set(PHYSICAL_SPECIFICATION.IS_REMOVED, false)
-                .where(PHYSICAL_SPECIFICATION.ID.eq(specificationId))
+                .where(PHYSICAL_SPECIFICATION.ID.eq(specificationId)
+                        .and(PHYSICAL_SPECIFICATION.IS_READONLY.isFalse()))
                 .execute();
     }
 
@@ -315,8 +355,97 @@ public class PhysicalSpecificationDao {
                     .select(requiredDecorators)
                     .execute();
 
+
+            removeUnknownFromLogicalFlowWherePossible(tx, specificationId, userName);
+
             return insertCount;
         });
+    }
+
+    private void removeUnknownFromLogicalFlowWherePossible(DSLContext tx, long specificationId, String userName) {
+
+        SelectHavingConditionStep<Record1<Long>> flowsWithOtherDataTypes = tx
+                .select(lfd.LOGICAL_FLOW_ID)
+                .from(lfd)
+                .innerJoin(lf).on(lf.ID.eq(lfd.LOGICAL_FLOW_ID))
+                .innerJoin(pf).on(pf.LOGICAL_FLOW_ID.eq(lf.ID))
+                .innerJoin(dt).on(dt.ID.eq(lfd.DECORATOR_ENTITY_ID))
+                .where(pf.SPECIFICATION_ID.eq(specificationId))
+                .and(dt.UNKNOWN.isFalse())
+                .and(lfd.DECORATOR_ENTITY_KIND.eq(EntityKind.DATA_TYPE.name()))
+                .groupBy(lfd.LOGICAL_FLOW_ID)
+                .having(count(lfd.DECORATOR_ENTITY_ID).gt(0));
+
+        SelectConditionStep<Record1<Long>> unknownDecoratorsThatCanBeRemoved = tx
+                .select(lfd.ID)
+                .from(lfd)
+                .innerJoin(dt).on(lfd.DECORATOR_ENTITY_ID.eq(dt.ID)
+                        .and(lfd.DECORATOR_ENTITY_KIND.eq(EntityKind.DATA_TYPE.name())))
+                .where(lfd.LOGICAL_FLOW_ID.in(flowsWithOtherDataTypes))
+                .and(dt.UNKNOWN.isTrue());
+
+        SelectJoinStep<Record6<String, Long, String, String, String, String>> requiredChangeLogs = tx
+                .select(val(EntityKind.LOGICAL_DATA_FLOW.name()),
+                        flowsWithOtherDataTypes.field(0, Long.class), // logical flow id
+                        val("Removed 'Unknown' data type as known data types were propagated from underlying physical flow/s"),
+                        val(userName),
+                        val(Severity.INFORMATION.name()),
+                        val(Operation.REMOVE.name()))
+                .from(flowsWithOtherDataTypes);
+
+        int changelogsInserted = tx
+                .insertInto(CHANGE_LOG)
+                .columns(
+                        CHANGE_LOG.PARENT_KIND,
+                        CHANGE_LOG.PARENT_ID,
+                        CHANGE_LOG.MESSAGE,
+                        CHANGE_LOG.USER_ID,
+                        CHANGE_LOG.SEVERITY,
+                        CHANGE_LOG.OPERATION)
+                .select(requiredChangeLogs)
+                .execute();
+
+        int removedUnknowns = tx
+                .deleteFrom(lfd)
+                .where(lfd.ID.in(unknownDecoratorsThatCanBeRemoved))
+                .execute();
+    }
+
+
+    public int updateFormat(long specId, DataFormatKindValue format) {
+        return dsl
+                .update(PHYSICAL_SPECIFICATION)
+                .set(PHYSICAL_SPECIFICATION.FORMAT, format.value())
+                .where(PHYSICAL_SPECIFICATION.ID.eq(specId)
+                        .and(PHYSICAL_SPECIFICATION.IS_READONLY.isFalse()))
+                .execute();
+    }
+
+
+    public int updateDescription(long specId, String description) {
+        return dsl
+                .update(PHYSICAL_SPECIFICATION)
+                .set(PHYSICAL_SPECIFICATION.DESCRIPTION, description)
+                .where(PHYSICAL_SPECIFICATION.ID.eq(specId)
+                        .and(PHYSICAL_SPECIFICATION.IS_READONLY.isFalse()))
+                .execute();
+    }
+
+
+    public Set<Operation> calculateAmendedSpecOperations(Set<Operation> operationsForEntity,
+                                                         String username) {
+        boolean hasOverride = dsl
+                .fetchExists(DSL
+                        .select(USER_ROLE.ROLE)
+                        .from(USER_ROLE)
+                        .where(USER_ROLE.ROLE.eq(SystemRole.PHYSICAL_SPECIFICATION_EDITOR.name())
+                                .and(USER_ROLE.USER_NAME.eq(username))));
+
+        if (hasOverride) {
+            return union(operationsForEntity, asSet(Operation.ADD, Operation.UPDATE, Operation.REMOVE));
+        } else {
+            return operationsForEntity;
+        }
     }
 
 }

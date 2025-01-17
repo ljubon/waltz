@@ -29,14 +29,17 @@ import {CORE_API} from "../../../common/services/core-api-utils";
 import template from "./source-and-target-graph.html"
 import {amberHex} from "../../../common/colors";
 import {sidebarExpanded} from "../../../navbar/sidebar-store";
+import {getSymbol} from "../../../common/svg-icon";
+import {flowDirection as FlowDirection} from "../../../common/services/enums/flow-direction";
 
 
 const bindings = {
-    flowClassificationsByCode: "<",
+    flowClassifications: "<",
     changeUnits: "<",
     decorators: "<",
     entityRef: "<",
     logicalFlows: "<",
+    ratingDirection: "<",
     tweakers: "<"
 };
 
@@ -185,7 +188,7 @@ function prepareGraph(svg) {
 }
 
 
-function mkModel({ logicalFlows = [], decorators = [], entityRef, allTypes = []}) {
+function mkModel({ logicalFlows = [], decorators = [], entityRef, allTypes = [], ratingDirection}) {
     const logicalFlowIds = _.map(logicalFlows, "id");
     const relevantDecorators = _.filter(
         decorators,
@@ -217,13 +220,19 @@ function mkModel({ logicalFlows = [], decorators = [], entityRef, allTypes = []}
     const sourceToType = _.chain(inbound)
         .flatMap(f => _.map(
             decoratorsByFlowId[f.id] || [],
-            d => ({ from: f.source.id, to: d.decoratorEntity.id, rating: d.rating, entityLifecycleStatus: f.entityLifecycleStatus })))
+            d => {
+                const rating = ratingDirection === FlowDirection.OUTBOUND.key ? d.rating : d.targetInboundRating;
+                return { from: f.source.id, to: d.decoratorEntity.id, rating, entityLifecycleStatus: f.entityLifecycleStatus};
+            }))
         .value();
 
     const typeToTarget = _.chain(outbound)
         .flatMap(f => _.map(
             decoratorsByFlowId[f.id] || [],
-            d => ({ from: d.decoratorEntity.id, to: f.target.id, rating: d.rating, entityLifecycleStatus: f.entityLifecycleStatus })))
+            d => {
+                const rating = ratingDirection === FlowDirection.OUTBOUND.key ? d.rating : d.targetInboundRating;
+                return { from: d.decoratorEntity.id, to: f.target.id, rating, entityLifecycleStatus: f.entityLifecycleStatus }
+            }))
         .value();
 
     const types = _.chain(relevantDecorators)
@@ -277,8 +286,8 @@ function translate(elem, dx = 0, dy = 0) {
 
 function setupSizing(sections, dimensions) {
     sections.svg
-       .attr("width", dimensions.graph.width)
-       .attr("height", dimensions.graph.height);
+        .attr("width", dimensions.graph.width)
+        .attr("height", dimensions.graph.height);
 
     const sdx = dimensions.margin.left + dimensions.label.width;
     const sdy = dimensions.margin.top;
@@ -330,9 +339,9 @@ function setupScales(model, dimensions) {
 function determineLabelTextAdjustment(anchor) {
     switch (anchor) {
         case "start":
-            return 10;
+            return 20;
         case "end":
-            return -25;
+            return -20;
         default:
             return 0;
     }
@@ -342,9 +351,9 @@ function determineLabelTextAdjustment(anchor) {
 function determineLabelIconAdjustment(anchor) {
     switch (anchor) {
         case "start":
-            return -6;
+            return 6;
         case "end":
-            return -6;
+            return -8;
         default:
             return 0;
     }
@@ -354,9 +363,9 @@ function determineLabelIconAdjustment(anchor) {
 function determineLabelCUIconAdjustment(anchor) {
     switch (anchor) {
         case "start":
-            return -20;
+            return -12;
         case "end":
-            return -20;
+            return 10;
         default:
             return 0;
     }
@@ -383,27 +392,42 @@ function drawLabels(section, items = [], scale, anchor = "start", tweakers) {
     newLabels
         .append("text")
         .attr("text-anchor", anchor)
-        .attr("dx", textAdjustment)
-        .text(d => _.truncate(d.name, { length: 26 }))
+        .text(d => _.truncate(d.name, {length: 26}))
+        .attr("transform", `translate(${textAdjustment},0)`)
         .style("fill", d => d.deprecated ? amberHex : "inherit");
 
-    newLabels
-        .append("text")
-        .classed("wsat-icon",true)
-        .attr("dx", iconAdjustment)
-        .attr("font-family", "FontAwesome");
+    if (tweakers.pfIcon) {
+        newLabels
+            .append("path")
+            .classed("wsat-icon", true)
+            .attr("d", d => tweakers.pfIcon(d).svgIcon)
+            .attr("stroke", d => tweakers.pfIcon(d).color)
+            .attr("transform", `translate(${iconAdjustment}, -6)`)
+            .attr("fill", "none");
+    }
 
-    newLabels
-        .append("text")
-        .classed("wsat-cuIcon",true)
-        .attr("dx", cuIconAdjustment)
-        .attr("font-family", "FontAwesome");
+
+    if (tweakers.cuIcon) {
+        newLabels
+            .append("path")
+            .classed(".wsat-cuIcon", true)
+            .attr("d", d => tweakers.cuIcon(d).svgIcon)
+            .attr("stroke", d => tweakers.cuIcon(d).color)
+            .attr("transform", `translate(${cuIconAdjustment}, -6)`)
+            .attr("fill", "none");
+    }
 
     labels
         .merge(newLabels)
         .classed("wsat-hover", (d) => highlighted === d.id)
-        .on("mouseenter.highlight", d => { highlighted = d.id; redraw(); })
-        .on("mouseleave.highlight", d => { highlighted = null; redraw(); })
+        .on("mouseenter.highlight", d => {
+            highlighted = d.id;
+            redraw();
+        })
+        .on("mouseleave.highlight", d => {
+            highlighted = null;
+            redraw();
+        })
         .on("click.tweaker", (d) => tweakers.onSelect(d, event))
         .on("mouseenter.tweaker", tweakers.onEnter)
         .on("mouseleave.tweaker", tweakers.onLeave)
@@ -416,16 +440,20 @@ function drawLabels(section, items = [], scale, anchor = "start", tweakers) {
         labels
             .merge(newLabels)
             .select(".wsat-icon")
-            .attr("fill", d => tweakers.pfIcon(d).color)
-            .text((d) => tweakers.pfIcon(d).code || "");
+            .append("path")
+            .attr("d", d => tweakers.pfIcon(d).svgIcon)
+            .attr("stroke", d => tweakers.pfIcon(d).color)
+            .attr("fill", "none");
     }
 
     if(tweakers.cuIcon) {
         labels
             .merge(newLabels)
             .select(".wsat-cuIcon")
-            .attr("fill", d => tweakers.cuIcon(d).color)
-            .text((d) => tweakers.cuIcon(d).code || "");
+            .append("path")
+            .attr("d", d => tweakers.cuIcon(d).svgIcon)
+            .attr("stroke", d => tweakers.cuIcon(d).color)
+            .attr("fill", "none");
     }
 
     labels
@@ -443,7 +471,7 @@ function drawLabels(section, items = [], scale, anchor = "start", tweakers) {
 }
 
 
-function drawArcs(section, model, layoutFn, flowClassificationsByCode) {
+function drawArcs(section, model, layoutFn, flowClassificationsByCode, ratingDirection) {
     const arcs = section
         .selectAll(`.${styles.ARC}`)
         .data(model, d => d.from + "-" + d.to);
@@ -581,6 +609,7 @@ function update(sections,
                 model,
                 tweakers,
                 flowClassificationsByCode) {
+
     redraw = () => update(sections, model, tweakers, flowClassificationsByCode);
 
     const dimensions = calculateDimensions(model);
@@ -628,6 +657,11 @@ function controller($element, $window, serviceBroker) {
 
         const tweakers = _.defaultsDeep(vm.tweakers, dfltTweakers);
 
+        vm.flowClassificationsByCode = _.chain(vm.flowClassifications)
+            .filter(d => d.direction === vm.ratingDirection)
+            .keyBy(d => d.code)
+            .value();
+
         serviceBroker
             .loadAppData(CORE_API.DataTypeStore.findAll)
             .then(r => {
@@ -636,7 +670,8 @@ function controller($element, $window, serviceBroker) {
                     logicalFlows: vm.logicalFlows || [],
                     decorators: vm.decorators || [],
                     entityRef: vm.entityRef,
-                    allTypes: types
+                    allTypes: types,
+                    ratingDirection: vm.ratingDirection || FlowDirection.INBOUND.key
                 };
                 const model = mkModel(data);
                 update(svgSections, model, tweakers, vm.flowClassificationsByCode);

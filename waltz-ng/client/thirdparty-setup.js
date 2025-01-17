@@ -30,6 +30,8 @@ function authProviderSetup($authProvider, BaseUrl) {
     $authProvider.loginUrl = "/authentication/login";
     $authProvider.withCredentials = false;
 
+    const oauthProviderDetails = oauthdetails;
+
     $authProvider.google({
         clientId: "Google account"
     });
@@ -41,6 +43,8 @@ function authProviderSetup($authProvider, BaseUrl) {
     $authProvider.linkedin({
         clientId: "LinkedIn Client ID"
     });
+
+    $authProvider.oauth2(oauthProviderDetails);
 }
 
 authProviderSetup.$inject = [
@@ -49,43 +53,12 @@ authProviderSetup.$inject = [
 ];
 
 
-function showdownSetup($showdownProvider) {
-    const customExtensions = () => {
-        const tableStyle = {
-            type: "output",
-            regex: /<table>/g,
-            replace: "<table class=\"table table-condensed table-striped table-bordered\">"
-        };
-
-        return [tableStyle];
-    };
-
-    $showdownProvider.loadExtension(customExtensions);
-
-    $showdownProvider.setOption("excludeTrailingPunctuationFromURLs", true);
-    $showdownProvider.setOption("sanitize", true);
-    $showdownProvider.setOption("simplifiedAutoLink", true);
-    $showdownProvider.setOption("simpleLineBreaks", true);
-    $showdownProvider.setOption("strikethrough", true);
-    $showdownProvider.setOption("tables", true);
-    $showdownProvider.setOption("tasklists", true);
-}
-
-showdownSetup.$inject  = [
-    "$showdownProvider"
-];
-
-
-
-
 function setup(module) {
     module
         .config(uiSelectSetup)
-        .config(authProviderSetup)
-        .config(showdownSetup);
+        .config(authProviderSetup);
 
     // for formly setup see: `formly/index.js`
-
 }
 
 

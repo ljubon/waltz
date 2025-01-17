@@ -2,31 +2,38 @@
     .wgrc-involvement-cell {
         background-color: #e0ffe1;
     }
+
     .wgrc-survey-question-cell {
-        background-color: #fffce0;
+        background-color: #fff59d;
     }
+
+    .wgrc-app-group-cell {
+        background-color: #d1dbff;
+    }
+
     .wgrc-no-data-cell {
         background-color: #f7f9f9;
     }
-
 </style>
 <div>
+
+    <!-- SUMMARIES -->
+    <waltz-svelte-component component="$ctrl.ReportGridControlPanel"
+                            on-grid-select="$ctrl.onGridSelect"
+                            primary-entity-ref="$ctrl.parentEntityRef">
+    </waltz-svelte-component>
+
 
     <waltz-loading-notification show="$ctrl.loading"
                                 name="Loading grid data">
     </waltz-loading-notification>
 
-    <div ng-if="!$ctrl.loading">
-        <!-- SUMMARIES -->
-        <waltz-svelte-component component="$ctrl.ReportGridControlPanel"
-                                on-grid-select="$ctrl.onGridSelect"
-                                on-save="$ctrl.onUpdateColumns">
-        </waltz-svelte-component>
 
+    <div ng-if="!$ctrl.loading">
         <br>
         <!-- GRID -->
         <div ng-if="$ctrl.tableData.length > 0">
-            <waltz-grid-with-search column-defs="$ctrl.columnDefs"
+            <waltz-grid-with-search column-defs="$ctrl.allColumnDefs"
                                     entries="$ctrl.tableData"
                                     search-control-min-rows="1"
                                     class="small">
@@ -35,7 +42,7 @@
             <waltz-data-extract-link name="Export grid"
                                      styling="link"
                                      filename="report.csv"
-                                     extract="report-grid/id/{{$ctrl.gridId}}"
+                                     extract="report-grid/external-id/{{$ctrl.gridDefinition.externalId}}"
                                      method="POST"
                                      request-body="$ctrl.selectionOptions">
             </waltz-data-extract-link>
@@ -47,8 +54,8 @@
             <message>
                 <strong>No data</strong>
                 <span ng-if="$ctrl.filters.length > 0">
-                , filters may be preventing data from being shown.
-            </span>
+                    , filters may be preventing data from being shown.
+                </span>
             </message>
         </waltz-no-data>
     </div>

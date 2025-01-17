@@ -18,15 +18,9 @@
 
 package org.finos.waltz.jobs.harness;
 
-import org.finos.waltz.model.EntityKind;
-import org.finos.waltz.model.IdSelectionOptions;
 import org.finos.waltz.service.DIConfiguration;
 import org.finos.waltz.service.cost.CostService;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-
-import static org.finos.waltz.common.FunctionUtilities.time;
-import static org.finos.waltz.model.EntityReference.mkRef;
-import static org.finos.waltz.model.IdSelectionOptions.mkOpts;
 
 
 public class AssetCostHarness {
@@ -36,21 +30,9 @@ public class AssetCostHarness {
         AnnotationConfigApplicationContext ctx = new AnnotationConfigApplicationContext(DIConfiguration.class);
         CostService svc = ctx.getBean(CostService.class);
 
-        IdSelectionOptions bill = mkOpts(mkRef(EntityKind.PERSON, 1234));
-        IdSelectionOptions jennifer = mkOpts(mkRef(EntityKind.PERSON, 5678));
-        IdSelectionOptions scott = mkOpts(mkRef(EntityKind.PERSON, 9876));
-        IdSelectionOptions infra = mkOpts(mkRef(EntityKind.ORG_UNIT, 1234));
+        svc.populateAllocatedCosts();
 
-        long tco = 6L;
-        long cirrus = 7L;
-//        time("tco cost summary for infra", () -> svc.summariseByCostKindAndSelector(tco, infra, EntityKind.APPLICATION, 20));
-//        time("cirrus cost summary for infra", () -> svc.summariseByCostKindAndSelector(cirrus, infra, EntityKind.APPLICATION, 20));
-////        time("cost summary for bill", () -> svc.summariseByCostKindAndSelector(tco, bill, EntityKind.APPLICATION, 20));
-//        time("tco cost summary for scott", () -> svc.summariseByCostKindAndSelector(tco, scott, EntityKind.APPLICATION, 20));
-        time("cirrus cost summary for jennifer", () -> svc.summariseByCostKindAndSelector(cirrus, jennifer, EntityKind.APPLICATION, 20));
-        time("cirrus cost summary for bill", () -> svc.summariseByCostKindAndSelector(cirrus, bill, EntityKind.APPLICATION, 20));
-        time("cirrus cost summary for scott", () -> svc.summariseByCostKindAndSelector(cirrus, scott, EntityKind.APPLICATION, 20));
-
+        System.out.println("done!");
 
     }
 

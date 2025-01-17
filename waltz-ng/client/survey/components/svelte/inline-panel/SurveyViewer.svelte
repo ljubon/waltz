@@ -15,6 +15,7 @@
     import {surveyInstanceStore} from "../../../../svelte-stores/survey-instance-store";
     import CopySurveyResponsesPanel from "./CopySurveyResponsesPanel.svelte";
     import Icon from "../../../../widgets/icon";
+    import Markdown from "../../../../common/svelte/Markdown.svelte";
 
     export let primaryEntityRef;
 
@@ -70,10 +71,24 @@
                 {#each section?.questions as question}
                     <div class="row section-question">
                         <div class="col-md-6 help-block">
-                            {question?.questionText}
-                            {#if question?.isMandatory}
-                            <span class="mandatory"
-                                  title="This question is mandatory">*</span>
+                            <div>
+                                {question?.questionText}
+                                {#if question?.isMandatory}
+                                    <span class="mandatory"
+                                          title="This question is mandatory">*</span>
+                                {/if}
+                            </div>
+                            {#if question?.externalId}
+                                <div class="text-muted small"
+                                     style="word-break: break-all">
+                                    ({question?.externalId})
+                                </div>
+                            {/if}
+                            {#if question?.helpText}
+                                <div class="text-muted small"
+                                     style="padding-top: 1em">
+                                    <Markdown text={question?.helpText}/>
+                                </div>
                             {/if}
                         </div>
                         <div class:col-md-6={_.isEmpty(question?.subQuestions)}
@@ -128,6 +143,8 @@
         border-bottom: 1px solid #ddd;
         background-color: #fafafa;
         background: linear-gradient(90deg, #fafafa 0%, rgba(255,255,255,1) 100%);
+        padding-top: 0.5em;
+        padding-bottom: 0.3em;
     }
 
     .sub-question-label {

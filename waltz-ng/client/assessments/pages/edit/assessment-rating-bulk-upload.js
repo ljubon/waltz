@@ -24,6 +24,7 @@ import {mkEntityLinkGridCell} from "../../../common/grid-utils";
 import {displayError} from "../../../common/error-utils";
 import {initialiseData} from "../../../common";
 import toasts from "../../../svelte-stores/toast-store";
+import BulkAssessmentRatingSelector from "../../components/bulk-assessment-rating-selector/BulkAssessmentRatingSelector.svelte";
 
 const ratingCellTemplate = `
     <div class="ui-grid-cell-contents">
@@ -34,6 +35,7 @@ const ratingCellTemplate = `
 
 
 const initialState = {
+    BulkAssessmentRatingSelector,
     columnDefs: [
         mkEntityLinkGridCell("Entity", "entityRef", "none", "right"),
         {
@@ -67,7 +69,9 @@ function controller($q,
     const loadAll = () => {
         serviceBroker
             .loadViewData(CORE_API.AssessmentDefinitionStore.getById, [definitionId])
-            .then(r => vm.definition = r.data);
+            .then(r => {
+                vm.definition = r.data
+            });
 
         const ratingSchemePromise = serviceBroker
             .loadViewData(CORE_API.RatingSchemeStore.findRatingsSchemeItems, [definitionId])
@@ -147,7 +151,7 @@ function controller($q,
             serviceBroker
                 .loadViewData(
                     CORE_API.AssessmentRatingStore.remove,
-                    [row.entityRef, definitionId])
+                    [row.entityRef, definitionId, row.ratingId])
                 .then(r => r.data)
                 .then(() => loadAll())
                 .then(() => toasts.success("Assessment Rating Removed for application " + row.entityRef.name))

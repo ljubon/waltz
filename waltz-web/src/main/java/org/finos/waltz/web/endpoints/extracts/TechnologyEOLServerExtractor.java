@@ -22,16 +22,21 @@ import org.finos.waltz.data.EntityReferenceNameResolver;
 import org.finos.waltz.data.application.ApplicationIdSelectorFactory;
 import org.finos.waltz.model.EntityReference;
 import org.finos.waltz.web.WebUtilities;
-import org.jooq.*;
+import org.jooq.DSLContext;
+import org.jooq.Record;
+import org.jooq.Record1;
+import org.jooq.Select;
+import org.jooq.SelectConditionStep;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import spark.Request;
 
-import static org.finos.waltz.schema.Tables.*;
-import static org.finos.waltz.schema.tables.Application.APPLICATION;
-import static org.finos.waltz.web.WebUtilities.getEntityReference;
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static org.finos.waltz.model.IdSelectionOptions.mkOpts;
+import static org.finos.waltz.schema.Tables.ORGANISATIONAL_UNIT;
+import static org.finos.waltz.schema.Tables.SERVER_INFORMATION;
+import static org.finos.waltz.schema.Tables.SERVER_USAGE;
+import static org.finos.waltz.schema.tables.Application.APPLICATION;
 import static spark.Spark.get;
 
 
@@ -63,6 +68,7 @@ public class TechnologyEOLServerExtractor extends DirectQueryBasedDataExtractor 
                     .select(APPLICATION.NAME.as("Application Name"), APPLICATION.ASSET_CODE.as("Asset Code"))
                     .select(SERVER_INFORMATION.HOSTNAME.as("Host Name"),
                             SERVER_USAGE.ENVIRONMENT.as("Environment"),
+                            SERVER_INFORMATION.COUNTRY.as("Country"),
                             SERVER_INFORMATION.LOCATION.as("Location"),
                             SERVER_INFORMATION.OPERATING_SYSTEM.as("Operating System"),
                             SERVER_INFORMATION.OS_END_OF_LIFE_DATE.as("Operating System EOL"),

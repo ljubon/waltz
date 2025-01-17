@@ -17,8 +17,6 @@
  */
 import _ from "lodash";
 import { indexRatingSchemes } from "../ratings/rating-utils";
-import { nest } from "d3-collection";
-import { grey } from "../common/colors";
 import { refToString } from "../common/entity-utils";
 import {CORE_API} from "../common/services/core-api-utils";
 import {resolveResponses} from "../common/promise-utils";
@@ -36,71 +34,34 @@ export function mkEnrichedAssessmentDefinitions(definitions = [],
                                                 schemes = [],
                                                 assessments = []) {
     const schemesByIdByRatingId = indexRatingSchemes(schemes);
-    const assessmentsByDefinitionId = _.keyBy(assessments, "assessmentDefinitionId");
+    const assessmentsByDefinitionId = _.groupBy(assessments, "assessmentDefinitionId");
 
     return _
         .chain(definitions)
         .map(definition => {
             const scheme = _.get(schemesByIdByRatingId, `[${definition.ratingSchemeId}]`);
-            const assessment = _.get(assessmentsByDefinitionId, `[${definition.id}]`, null);
-            const ratingSchemeItem = assessment != null
-                ? _.get(scheme, `ratingsById[${assessment.ratingId}]`)
-                : null;
 
-            const dropdownEntries = _.map(
-                scheme.ratings,
-                r => Object.assign(
-                    {},
-                    r,
-                    { code: r.id }));
+            const assessments = _.get(assessmentsByDefinitionId, `[${definition.id}]`, []);
+
+            const ratings = _.map(assessments, d => ({
+                rating: d,
+                ratingItem: _.get(scheme, `ratingsById[${d.ratingId}]`)
+            }));
+
+            const dropdownEntries = scheme
+                ? _.map(
+                    scheme.ratings,
+                    r => Object.assign(
+                        {},
+                        r,
+                        {code: r.id}))
+                : [];
 
             return {
                 definition,
-                rating: assessment,
-                ratingItem: ratingSchemeItem,
-                dropdownEntries };
-        })
-        .orderBy("name")
-        .value();
-}
-
-
-export function mkAssessmentSummaries(definitions = [], schemes = [], ratings = [], total = 0) {
-    const indexedRatingSchemes = indexRatingSchemes(schemes);
-    const definitionsById = _.keyBy(definitions, d => d.id);
-
-    const nestedRatings = nest()
-        .key(d => d.assessmentDefinitionId)
-        .key(d => d.ratingId)
-        .rollup(xs => xs.length)
-        .entries(ratings);
-
-    return _
-        .chain(nestedRatings)
-        .map(d => {
-            const definition = definitionsById[Number(d.key)];
-            const assignedTotal = _.sumBy(d.values, v => v.value);
-            const values = _
-                .chain(d.values)
-                .map(v => {
-                    const propPath = [definition.ratingSchemeId, "ratingsById", v.key];
-                    const rating = _.get(indexedRatingSchemes, propPath);
-                    return Object.assign({}, v, { rating, count: v.value });
-                })
-                .concat([{
-                    key: "z",
-                    rating: {
-                        id: -1,
-                        name: "Not Provided",
-                        color: grey
-                    },
-                    count: _.max([0, total - assignedTotal])
-                }])
-                .filter(d => d.count > 0)
-                .value();
-
-            const extension = { definition, values };
-            return Object.assign({}, d , extension);
+                ratings,
+                dropdownEntries
+            };
         })
         .orderBy(d => d.definition.name)
         .value();
@@ -149,6 +110,7 @@ export function filterByAssessmentRating(entities = [],
  * @param $q
  * @param serviceBroker
  * @param kind
+ * @param options
  * @param primaryOnly
  * @returns {*}
  */
@@ -230,4 +192,19 @@ function loadAssessments($q, serviceBroker, kind, ratingsPromise, primaryOnly = 
                 assessmentsByEntityId: enrichedByEntityId // assessmentsByEntityId: entity id -> assessment def external id -> assessment
             };
         });
+}
+
+
+export function isFavourite(favouriteDefinitionIds, id) {
+    return _.includes(favouriteDefinitionIds, id);
+}
+
+
+export function getIdsFromString(includedFavouritesString) {
+    return _.isNil(includedFavouritesString)
+        ? []
+        : _.chain(includedFavouritesString.value)
+            .split(",")
+            .map(idString => _.toNumber(idString))
+            .value();
 }

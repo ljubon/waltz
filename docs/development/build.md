@@ -1,12 +1,14 @@
 # Building
 
+Note: If you would like to build and run Waltz on MacOS with PostgreSQL, use [this guide](build-and-run-on-mac.md).
+
 Waltz is built using [Maven](https://maven.apache.org/).
 
 ## Prerequisites
 
 - [Git](https://git-scm.com/)
 - [Maven 3](https://maven.apache.org/)
-- [JDK 8](http://www.oracle.com/technetwork/java/javase/overview/index.html)
+- [JDK 8+](http://www.oracle.com/technetwork/java/javase/overview/index.html) (see note below)
 - [Node](https://nodejs.org/en/)
   - [NPM](https://www.npmjs.com/) v6+
 - [Sass](http://sass-lang.com/)
@@ -15,6 +17,12 @@ Waltz is built using [Maven](https://maven.apache.org/).
   - [Postgres](https://www.postgresql.org/)
 - [Liquibase](http://www.liquibase.org/) (recommended but not essential)
 - [_jOOQ Pro_](https://www.jooq.org/download/) (if using Microsoft SQL Server) 
+
+
+**Note**:
+When developing on JDK 9+ please ensure all class imports are explicit.
+This is to prevent collisions between `java.lang.Record` and `org.jooq.Record` which can cause compilation errors (see issue: [#6678](https://github.com/finos/waltz/issues/6678))
+
 
 ## Obtaining the code
 
@@ -43,10 +51,10 @@ See [Dump and restore](database/dump_and_restore.md) for details on how to impor
 ## Setting up maven profiles
 
 Waltz uses maven profiles to target the build against the correct database.  Generic db vendor settings are located in  
-the profiles section of `<REPO>/waltz-schema/pom.xml` and should not need to be changed.
+the profiles section of `<REPO>/pom.xml` and should not need to be changed.
 
 Specific database connection details should be configured in the 
-`~/.m2/settings.xml` file.  An example (for both MariaDB and Microsoft 
+`~/.m2/settings.xml` file.  An example (for both PostreSQL and Microsoft 
 SQL Server) would look like:
 
 ```xml
@@ -85,7 +93,7 @@ SQL Server) would look like:
 
 Typically one of two maven targets is executed.  For the first run (and whenever schema updates are required) then a full `package` build should be executed.  For code only change then the quicker `compile` target can be used.
 
-When running either variant you must provide the names of two profiles, firstly the generic database profile (either `waltz-mariadb` or `waltz-mssql`) and the specific profile created in your `~.m2/settings.xml` file (in the example above either `dev-maria` or `dev-mssql`).
+When running either variant you must provide the names of two profiles, firstly the generic database profile (either `waltz-postgres` or `waltz-mssql`) and the specific profile created in your `~/.m2/settings.xml` file (in the example above either `dev-postgres` or `dev-mssql`).
 
 ### Examples (using aliases)
 
@@ -94,7 +102,7 @@ Below are some example maven command lines.  We typically register the command a
 ```
 alias compile-postgres='mvn clean compile -P waltz-postgres,dev-postgres'
 alias compile-mssql='mvn clean compile -P waltz-mssql,dev-mssql'
-alias pkg-postgres='mvn clean package -P waltz-postrgres,dev-postgres'
+alias pkg-postgres='mvn clean package -P waltz-postgres,dev-postgres'
 alias pkg-mssql='mvn clean package -P waltz-mssql,dev-mssql'
 ```
 

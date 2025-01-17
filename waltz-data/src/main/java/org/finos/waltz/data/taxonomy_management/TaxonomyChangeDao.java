@@ -19,8 +19,6 @@
 package org.finos.waltz.data.taxonomy_management;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.finos.waltz.schema.tables.records.TaxonomyChangeRecord;
 import org.finos.waltz.data.InlineSelectFieldFactory;
 import org.finos.waltz.data.JooqUtilities;
 import org.finos.waltz.model.EntityKind;
@@ -29,10 +27,13 @@ import org.finos.waltz.model.taxonomy_management.ImmutableTaxonomyChangeCommand;
 import org.finos.waltz.model.taxonomy_management.TaxonomyChangeCommand;
 import org.finos.waltz.model.taxonomy_management.TaxonomyChangeLifecycleStatus;
 import org.finos.waltz.model.taxonomy_management.TaxonomyChangeType;
+import org.finos.waltz.schema.tables.records.TaxonomyChangeRecord;
+import org.jooq.Condition;
 import org.jooq.DSLContext;
 import org.jooq.Field;
 import org.jooq.Record;
 import org.jooq.RecordMapper;
+import org.jooq.impl.DSL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
 
@@ -42,16 +43,15 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiFunction;
 
-import static org.finos.waltz.schema.tables.TaxonomyChange.TAXONOMY_CHANGE;
 import static org.finos.waltz.common.DateTimeUtilities.nowUtcTimestamp;
 import static org.finos.waltz.common.DateTimeUtilities.toLocalDateTime;
+import static org.finos.waltz.common.JacksonUtilities.getJsonMapper;
 import static org.finos.waltz.common.SetUtilities.asSet;
+import static org.finos.waltz.schema.tables.TaxonomyChange.TAXONOMY_CHANGE;
 
 
 @Repository
 public class TaxonomyChangeDao {
-
-    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
 
     private static final Field<String> PRIMARY_REF_NAME = InlineSelectFieldFactory.mkNameField(
             TAXONOMY_CHANGE.PRIMARY_REFERENCE_ID,
@@ -104,7 +104,7 @@ public class TaxonomyChangeDao {
 
     private static Map<String, ? extends String> readParams(Record r) {
         try {
-            return JSON_MAPPER.readValue(
+            return getJsonMapper().readValue(
                     r.get(TAXONOMY_CHANGE.PARAMS),
                     Map.class);
         } catch (Exception e) {
@@ -115,7 +115,7 @@ public class TaxonomyChangeDao {
 
     private static String writeParams(Map<String, String> map) {
         try {
-            return JSON_MAPPER.writeValueAsString(map);
+            return getJsonMapper().writeValueAsString(map);
         } catch (JsonProcessingException e) {
             return "{}";
         }
@@ -161,15 +161,19 @@ public class TaxonomyChangeDao {
                 .withId(r.getId());
     }
 
-    public Collection<TaxonomyChangeCommand> findChangesByDomainAndStatus(EntityReference domain, TaxonomyChangeLifecycleStatus status) {
-        return dsl
-                .select(TAXONOMY_CHANGE.fields())
-                .select(PRIMARY_REF_NAME, CHANGE_DOMAIN_NAME)
-                .from(TAXONOMY_CHANGE)
-                .where(TAXONOMY_CHANGE.STATUS.eq(status.name()))
-                .and(TAXONOMY_CHANGE.DOMAIN_ID.eq(domain.id()))
-                .and(TAXONOMY_CHANGE.DOMAIN_KIND.eq(domain.kind().name()))
-                .fetch(TO_DOMAIN_MAPPER);
+
+    public Collection<TaxonomyChangeCommand> findChangesByDomain(EntityReference domain) {
+        return findChangesByDomainAndCondition(
+                domain,
+                DSL.trueCondition());
+    }
+
+
+    public Collection<TaxonomyChangeCommand> findChangesByDomainAndStatus(EntityReference domain,
+                                                                          TaxonomyChangeLifecycleStatus status) {
+        return findChangesByDomainAndCondition(
+                domain,
+                TAXONOMY_CHANGE.STATUS.eq(status.name()));
     }
 
 
@@ -178,4 +182,21 @@ public class TaxonomyChangeDao {
         r.update();
         return cmd;
     }
+
+
+    // -- helpers ----
+
+    private Collection<TaxonomyChangeCommand> findChangesByDomainAndCondition(EntityReference domain,
+                                                                              Condition condition) {
+        return dsl
+                .select(TAXONOMY_CHANGE.fields())
+                .select(PRIMARY_REF_NAME, CHANGE_DOMAIN_NAME)
+                .from(TAXONOMY_CHANGE)
+                .where(TAXONOMY_CHANGE.DOMAIN_ID.eq(domain.id()))
+                .and(TAXONOMY_CHANGE.DOMAIN_KIND.eq(domain.kind().name()))
+                .and(condition)
+                .fetch(TO_DOMAIN_MAPPER);
+    }
+
+
 }

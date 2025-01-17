@@ -24,10 +24,8 @@ import "angular-tree-control";
 import "angular-ui-grid/ui-grid";
 import "angular-ui-bootstrap";
 import "ng-tags-input";
-import "ng-showdown";
 import "satellizer";
 import "ui-select";
-
 import "@uirouter/angularjs";
 
 import AngularFormly from "angular-formly";
@@ -35,13 +33,13 @@ import AngularFormlyTemplates from "angular-formly-templates-bootstrap";
 
 import AccessLog from "./access-log";
 import Actor from "./actor";
+import AggregateOverlayDiagram from "./aggregate-overlay-diagram";
 import Alias from "./alias";
 import Allocation from "./allocation";
 import AllocationScheme from "./allocation-scheme";
 import Applications from "./applications";
 import AppGroups from "./app-groups";
 import Assessments from "./assessments";
-import AssetCost from "./asset-cost";
 import Attestation from "./attestation";
 import AttributeChange from "./attribute-change";
 import Bookmarks from "./bookmarks";
@@ -79,6 +77,9 @@ import Formly from "./formly";
 import History from "./history";
 import Involvement from "./involvement";
 import InvolvementKind from "./involvement-kind";
+import LegalEntity from "./legal-entity";
+import LegalEntityRelationship from "./legal-entity-relationship";
+import LegalEntityRelationshipKind from "./legal-entity-relationship-kind";
 import Licence from "./licence";
 import LogicalDataElement from "./logical-data-element";
 import LogicalFlow from "./logical-flow";
@@ -134,7 +135,6 @@ const dependencies = [
     "ngAnimate",
     "ngSanitize",
     "ngTagsInput",
-    "ng-showdown",
     "satellizer",
     "LocalStorageModule",
     AngularFormly,
@@ -145,13 +145,13 @@ const dependencies = [
     // -- waltz-modules ---
     AccessLog(),
     Actor(),
+    AggregateOverlayDiagram(),
     Alias(),
     Allocation(),
     AllocationScheme(),
     Applications(),
     AppGroups(),
     Assessments(),
-    AssetCost(),
     Attestation(),
     AttributeChange(),
     Bookmarks(),
@@ -189,6 +189,9 @@ const dependencies = [
     History(),
     Involvement(),
     InvolvementKind(),
+    LegalEntity(),
+    LegalEntityRelationship(),
+    LegalEntityRelationshipKind(),
     Licence(),
     LogicalDataElement(),
     LogicalFlow(),

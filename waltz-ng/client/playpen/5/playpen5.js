@@ -15,24 +15,35 @@
  * See the License for the specific
  *
  */
-import template from './playpen5.html';
+import template from "./playpen5.html";
+import DiagramBuilder from "../../entity-diagrams/components/entity-overlay-diagrams/builder/DiagramBuilder.svelte";
+import {CORE_API} from "../../common/services/core-api-utils";
 
 
 const initialState = {
+    DiagramBuilder
 };
 
 
-function controller() {
+function controller(serviceBroker) {
 
     const vm = Object.assign(this, initialState);
 
+    serviceBroker
+        .loadAppData(
+            CORE_API.SvgDiagramStore.findByGroups,
+            [ "TEST" ])
+        .then(r => vm.diagrams = console.log(r.data) || r.data);
 
-
-
+    vm.blockProcessor = b => {
+        // b.block.onclick = () => $state.go("main.person.view", { empId: b.value });
+        // angular.element(b.block).addClass("clickable");
+    };
 }
 
 
 controller.$inject = [
+    "ServiceBroker"
 ];
 
 
@@ -40,7 +51,7 @@ controller.$inject = [
 const view = {
     template,
     controller,
-    controllerAs: 'ctrl',
+    controllerAs: "$ctrl",
     bindToController: true,
     scope: {}
 };

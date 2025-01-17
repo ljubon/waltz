@@ -16,18 +16,50 @@
  *
  */
 import template from './physical-specification-overview.html';
+import {CORE_API} from "../../../common/services/core-api-utils";
+import _ from "lodash";
+import {initialiseData} from "../../../common";
 
 
 const bindings = {
     specification: '<',
     owningEntity: '<',
-    organisationalUnit: '<'
+    organisationalUnit: '<',
+    onSaveFormat: "<",
+    onSaveDescription: "<"
 };
 
 
+const initialState = {
+    specification: null,
+    visibility: {
+        overviewEditor: false
+    }
+};
+
+function controller(serviceBroker) {
+
+    const vm = initialiseData(this, initialState);
+
+    vm.$onInit = () => {
+        serviceBroker.loadViewData(CORE_API.PhysicalSpecificationStore.findPermissionsForSpec, [vm.specification.id])
+            .then(r => vm.canEdit = _.some(
+                r.data,
+                d => _.includes(["ADD", "UPDATE", "REMOVE"], d)));
+    };
+
+}
+
+
+controller.$inject = [
+    "ServiceBroker"
+];
+
+
 const component = {
-    template,
-    bindings
+    bindings,
+    controller,
+    template
 };
 
 export default component;

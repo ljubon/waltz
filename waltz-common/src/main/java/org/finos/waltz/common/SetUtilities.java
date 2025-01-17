@@ -20,6 +20,8 @@ package org.finos.waltz.common;
 
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static org.finos.waltz.common.Checks.checkNotNull;
 import static java.util.stream.Collectors.toSet;
@@ -50,6 +52,13 @@ public class SetUtilities {
         if (xs == null || xs.isEmpty()) return new HashSet<>();
         return xs.stream()
                 .map(fn)
+                .collect(toSet());
+    }
+
+    public static <X> Set<X> filter(Collection<X> xs, Predicate<X> predicate) {
+        if (xs == null || xs.isEmpty()) return new HashSet<>();
+        return xs.stream()
+                .filter(predicate)
                 .collect(toSet());
     }
 
@@ -133,5 +142,48 @@ public class SetUtilities {
 
         return minus(union(xs,ys), intersection(xs,ys));
 
+    }
+
+
+    public static <T> boolean hasIntersection(Set<T> xs,
+                                              Set<T> ys) {
+        return ! intersection(xs, ys).isEmpty();
+    }
+
+
+    public static <T> Set<T> fromOptionals(Collection<Optional<T>> ts) {
+        return ts
+                .stream()
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Given a set and an optional entry, adds to the set if present otherwise returns the original set
+     *
+     * @param ts    the existing set to add to
+     * @param toAdd the optional entry to add to the set
+     * @param <T>
+     * @return
+     */
+    public static <T> Set<T> maybeAdd(Set<T> ts, Optional<T> toAdd) {
+        return toAdd
+                .map(t -> union(ts, asSet(t)))
+                .orElse(ts);
+    }
+
+
+    public static <T> Set<T> add(Set<T> orig, T... ts) {
+        return union(orig, asSet(ts));
+    }
+
+
+    public static <T> Set<T> remove(Set<T> orig, T... ts) {
+        return minus(orig, asSet(ts));
+    }
+
+    public static <T> Set<T> compact(T... ts) {
+        return remove(asSet(ts), (T) null);
     }
 }
